@@ -294,11 +294,29 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO PURO
-  const fieldInputStyle = "w-full !bg-white !text-black border border-gray-300 rounded-xl p-3.5 font-bold text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+  // CLASES OBLIGATORIAS DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
+  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-6 px-4">
+      {/* INYECCIÓN CSS PARA FORZAR NEGRO PURO EN TEXTO ESCRITO, SELECCIÓN Y PLACEHOLDERS */}
+      <style jsx global>{`
+        input, select, textarea {
+          color: #000000 !important;
+          background-color: #ffffff !important;
+          -webkit-text-fill-color: #000000 !important;
+          opacity: 1 !important;
+        }
+        input::placeholder, textarea::placeholder {
+          color: #6b7280 !important;
+          -webkit-text-fill-color: #6b7280 !important;
+        }
+        select option {
+          color: #000000 !important;
+          background-color: #ffffff !important;
+        }
+      `}</style>
+
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
         {/* NAVEGACIÓN SUPERIOR */}
@@ -477,9 +495,9 @@ export default function Home() {
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, cliente_id: e.target.value})}
                     className={fieldInputStyle}
                   >
-                    <option value="" className="text-gray-700">-- Selecciona Cliente --</option>
+                    <option value="">-- Selecciona Cliente --</option>
                     {clientes.map(c => (
-                      <option key={c.id} value={c.id} className="text-black font-semibold">{c.nombre_completo} (Cédula: {c.cedula})</option>
+                      <option key={c.id} value={c.id}>{c.nombre_completo} (Cédula: {c.cedula})</option>
                     ))}
                   </select>
                 </div>
@@ -514,13 +532,13 @@ export default function Home() {
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, esquema_cobro: e.target.value})}
                     className={fieldInputStyle}
                   >
-                    <option value="5_20" className="text-black font-semibold">Días 5 y 20</option>
-                    <option value="10_25" className="text-black font-semibold">Días 10 y 25</option>
-                    <option value="15_30" className="text-black font-semibold">Días 15 y 30</option>
+                    <option value="5_20">Días 5 y 20</option>
+                    <option value="10_25">Días 10 y 25</option>
+                    <option value="15_30">Días 15 y 30</option>
                   </select>
                 </div>
 
-                {/* CAMPO DE FECHA EN FORMATO LATINO (dd/mm/aaaa) */}
+                {/* FECHA LATINA (DD/MM/AAAA) */}
                 <div>
                   <label className="block font-semibold text-gray-300 mb-1">Fecha Desembolso (dd/mm/aaaa) *</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -571,9 +589,9 @@ export default function Home() {
                       onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
                       className={fieldInputStyle}
                     >
-                      <option value="" className="text-gray-700">-- Selecciona Préstamo --</option>
+                      <option value="">-- Selecciona Préstamo --</option>
                       {prestamos.filter(p => p.estado === 'activo').map(p => (
-                        <option key={p.id} value={p.id} className="text-black font-semibold">
+                        <option key={p.id} value={p.id}>
                           {p.clientes?.nombre_completo} (Cédula: {p.clientes?.cedula}) - Saldo: ${Number(p.capital_pendiente).toFixed(2)}
                         </option>
                       ))}
@@ -598,13 +616,13 @@ export default function Home() {
                         onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
                         className={fieldInputStyle}
                       >
-                        <option value="Yappy" className="text-black font-semibold">Yappy</option>
-                        <option value="ACH" className="text-black font-semibold">ACH (Transferencia)</option>
+                        <option value="Yappy">Yappy</option>
+                        <option value="ACH">ACH (Transferencia)</option>
                       </select>
                     </div>
                   </div>
 
-                  {/* FECHA LATINA DE PAGO (dd/mm/aaaa) */}
+                  {/* FECHA LATINA DE PAGO (DD/MM/AAAA) */}
                   <div>
                     <label className="block font-semibold text-gray-300 mb-1">Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
                     <div className="grid grid-cols-3 gap-2">
@@ -692,7 +710,7 @@ export default function Home() {
 
       </div>
 
-      {/* --- COMPONENTE MODAL/POPUP CUSTOM PWA (DARK MODE) --- */}
+      {/* --- MODAL PWA (DARK MODE) --- */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
