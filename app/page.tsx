@@ -19,13 +19,21 @@ export default function Home() {
 
   // Formularios
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
-  const [nuevoPrestamo, setNuevoPrestamo] = useState({ cliente_id: '', monto_original: '', tasa_quincenal: '10', esquema_cobro: '15_30', fecha_inicio: '' });
+  const [nuevoPrestamo, setNuevoPrestamo] = useState({ cliente_id: '', monto_original: '', tasa_quincenal: '', esquema_cobro: '15_30', fecha_inicio: '' });
   const [nuevoPago, setNuevoPago] = useState({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
   const [csvTexto, setCsvTexto] = useState('');
 
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  // Cambio de pestaña suave con scroll al inicio
+  function cambiarPestana(tab: 'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv') {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
 
   async function cargarDatos() {
     setLoading(true);
@@ -140,8 +148,8 @@ export default function Home() {
     const monto = parseFloat(nuevoPrestamo.monto_original);
     const tasa = parseFloat(nuevoPrestamo.tasa_quincenal);
 
-    if (!nuevoPrestamo.cliente_id || !monto || !tasa || !nuevoPrestamo.fecha_inicio) {
-      return alert('Completa todos los campos requeridos');
+    if (!nuevoPrestamo.cliente_id || !monto || isNaN(tasa) || !nuevoPrestamo.fecha_inicio) {
+      return alert('Completa todos los campos requeridos incluyendo la tasa');
     }
 
     const { error } = await supabase.from('prestamos').insert([{
@@ -157,13 +165,12 @@ export default function Home() {
     if (error) {
       alert('Error creando préstamo: ' + error.message);
     } else {
-      setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '10', esquema_cobro: '15_30', fecha_inicio: '' });
+      setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '', esquema_cobro: '15_30', fecha_inicio: '' });
       cargarDatos();
       alert('Préstamo registrado');
     }
   }
 
-  // --- REGISTRO DE COBRO CON CÁLCULO DE INTERÉS SOBRE SALDO REAL ---
   async function handleRegistrarPago(e: React.FormEvent) {
     e.preventDefault();
     const prestamo = prestamos.find(p => p.id === nuevoPago.prestamo_id);
@@ -174,22 +181,17 @@ export default function Home() {
     const fechaPagoEval = nuevoPago.fecha_pago ? new Date(nuevoPago.fecha_pago) : new Date();
     const fechaInicio = new Date(prestamo.fecha_inicio);
 
-    // Calcular cuántas quincenas (períodos de 15 días) han transcurrido
     const diasDiferencia = Math.max(1, Math.floor((fechaPagoEval.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24)));
     const quincenasTranscurridas = Math.max(1, Math.ceil(diasDiferencia / 15));
 
-    // Obtener pagos previos hechos a este préstamo
     const pagosPrevios = pagos.filter(p => p.prestamo_id === prestamo.id);
     const totalInteresYaPagado = pagosPrevios.reduce((acc, curr) => acc + Number(curr.aplicado_interes || 0), 0);
 
-    // Interés por quincena calculado SOBRE EL SALDO PENDIENTE ACTUAL
     const interesPorQuincena = (Number(prestamo.capital_pendiente) * Number(prestamo.tasa_quincenal)) / 100;
     const interesTotalAcumuladoHastaHoy = quincenasTranscurridas * interesPorQuincena;
     
-    // Interés pendiente real no pagado
     const interesPendientePorCobrar = Math.max(0, interesTotalAcumuladoHastaHoy - totalInteresYaPagado);
 
-    // PRELACIÓN SOBRE SALDO: Cubre intereses pendientes acumulados, sobrante a Capital
     const aplicadoInteres = Math.min(montoAbonado, interesPendientePorCobrar);
     const aplicadoCapital = Math.max(0, montoAbonado - aplicadoInteres);
 
@@ -209,7 +211,6 @@ export default function Home() {
 
     if (errPago) return alert('Error al registrar pago: ' + errPago.message);
 
-    // Descontar saldo de capital
     const nuevoCapitalPendiente = Math.max(0, Number(prestamo.capital_pendiente) - aplicadoCapital);
     const nuevoEstado = nuevoCapitalPendiente === 0 ? 'cancelado' : 'activo';
 
@@ -235,10 +236,10 @@ export default function Home() {
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-8">
-      <div className="max-w-3xl mx-auto px-4 space-y-6">
+    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-6 px-4">
+      <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* CABECERA CENTRADA */}
+        {/* CABECERA Y NAVEGACIÓN SUPERIOR UNIFICADA */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
@@ -247,12 +248,12 @@ export default function Home() {
             <h1 className="text-lg font-bold text-white tracking-wide">CRM Préstamos</h1>
           </div>
 
-          <nav className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-medium">
+          <nav className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-medium w-full sm:w-auto justify-center overflow-x-auto">
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                onClick={() => cambiarPestana(tab)}
+                className={`px-3 py-1.5 rounded-lg capitalize transition whitespace-nowrap ${
                   activeTab === tab ? 'bg-blue-600 text-white font-semibold shadow-sm' : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -262,7 +263,7 @@ export default function Home() {
           </nav>
         </header>
 
-        {/* TARJETA NEGRA DE RESUMEN */}
+        {/* TARJETA NEGRA PRINCIPAL */}
         <div className="bg-gray-900 border border-gray-800 text-white rounded-3xl p-6 shadow-xl space-y-6">
           <div className="flex justify-between items-start">
             <div>
@@ -290,8 +291,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CONTENIDO PRINCIPAL */}
-        <main>
+        {/* CONTENIDO PRINCIPAL POR PESTAÑAS */}
+        <main className="transition-all duration-200">
           {loading && <p className="text-center text-gray-400 py-12 text-sm">Cargando datos...</p>}
 
           {!loading && activeTab === 'dashboard' && (
@@ -335,7 +336,7 @@ export default function Home() {
                       placeholder="Juan Pérez"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block font-medium text-gray-300 mb-1">Cédula *</label>
                       <input 
@@ -367,7 +368,7 @@ export default function Home() {
                       placeholder="Panamá"
                     />
                   </div>
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition mt-2">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
                     Guardar Cliente
                   </button>
                 </form>
@@ -421,7 +422,7 @@ export default function Home() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-medium text-gray-300 mb-1">Monto ($) *</label>
                     <input 
@@ -439,11 +440,12 @@ export default function Home() {
                       value={nuevoPrestamo.tasa_quincenal} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, tasa_quincenal: e.target.value})}
                       className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Ej: 5 o 10"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-medium text-gray-300 mb-1">Esquema Cobro *</label>
                     <select 
@@ -467,7 +469,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition mt-2">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
                   Generar Préstamo
                 </button>
               </form>
@@ -495,7 +497,7 @@ export default function Home() {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block font-medium text-gray-300 mb-1">Monto ($) *</label>
                       <input 
@@ -529,7 +531,8 @@ export default function Home() {
                     />
                   </div>
 
-                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg">
+                  {/* BOTÓN AZUL UNIFICADO */}
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg">
                     Procesar Cobro
                   </button>
                 </form>
@@ -547,7 +550,7 @@ export default function Home() {
                       <div className="text-right">
                         <p className="font-bold text-emerald-400 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
                         <p className="text-[10px] text-gray-400 mt-0.5">
-                          (Int: ${Number(p.aplicado_interes).toFixed(2)} / Cap:${Number(p.aplicado_capital).toFixed(2)})
+                          (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-600 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
                         </p>
                       </div>
                     </div>
@@ -575,7 +578,7 @@ export default function Home() {
                   placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon"
                   className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-mono focus:outline-none focus:border-blue-500"
                 />
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-md">
                   Cargar Lista de Clientes
                 </button>
               </form>
