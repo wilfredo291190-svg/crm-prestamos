@@ -20,7 +20,7 @@ export default function Home() {
   // Formularios
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
   const [nuevoPrestamo, setNuevoPrestamo] = useState({ cliente_id: '', monto_original: '', tasa_quincenal: '5', esquema_cobro: '5_20', fecha_inicio: '' });
-  const [nuevoPago, setNuevoPago] = useState({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy' });
+  const [nuevoPago, setNuevoPago] = useState({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
 
   useEffect(() => {
     cargarDatos();
@@ -41,16 +41,13 @@ export default function Home() {
     if (dataClientes) setClientes(dataClientes);
     if (dataPrestamos) {
       setPrestamos(dataPrestamos);
-      if (dataQuincenas) {
-        await verificarYGenerarQuincenas(dataPrestamos, dataQuincenas);
-      }
+      if (dataQuincenas) await verificarYGenerarQuincenas(dataPrestamos, dataQuincenas);
     }
     if (dataPagos) setPagos(dataPagos);
 
     setLoading(false);
   }
 
-  // --- RECURRENCIA AUTOMÁTICA DE INTERESES QUINCENALES ---
   async function verificarYGenerarQuincenas(listaPrestamos: any[], quincenasExistentes: any[]) {
     const hoy = new Date();
 
@@ -89,10 +86,9 @@ export default function Home() {
     if (dataQuincenasActualizadas) setQuincenas(dataQuincenasActualizadas);
   }
 
-  // --- EVALUACIÓN DE ESTADO / MOROSIDAD DEL CLIENTE ---
   function getEstadoCliente(clienteId: string) {
     const prestamosCliente = prestamos.filter(p => p.cliente_id === clienteId && p.estado === 'activo');
-    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
 
     const hoyStr = new Date().toISOString().split('T')[0];
     let tieneMora = false;
@@ -105,11 +101,10 @@ export default function Home() {
       }
     }
 
-    if (tieneMora) return { label: 'En Mora', color: 'bg-red-500/10 text-red-400 border-red-500/30' };
-    return { label: 'Al Día', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+    if (tieneMora) return { label: 'En Mora', color: 'bg-red-100 text-red-800 border-red-200' };
+    return { label: 'Al Día', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
   }
 
-  // --- ACCIONES ---
   function formatearTelefono(val: string) {
     const num = val.replace(/\D/g, '');
     if (num.length <= 4) return num;
@@ -132,6 +127,19 @@ export default function Home() {
       setNuevoCliente({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
       cargarDatos();
       alert('Cliente registrado con éxito');
+    }
+  }
+
+  // --- FUNCIÓN PARA BORRAR CLIENTE ---
+  async function handleBorrarCliente(id: string, nombre: string) {
+    if (confirm(`¿Estás seguro de borrar a ${nombre}? Se eliminarán sus registros.`)) {
+      const { error } = await supabase.from('clientes').delete().eq('id', id);
+      if (error) {
+        alert('Error al borrar cliente: ' + error.message);
+      } else {
+        cargarDatos();
+        alert('Cliente eliminado correctamente');
+      }
     }
   }
 
@@ -159,7 +167,7 @@ export default function Home() {
     } else if (prestamoCreado) {
       setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '5', esquema_cobro: '5_20', fecha_inicio: '' });
       cargarDatos();
-      alert('Préstamo creado. El sistema calculará automáticamente sus quincenas.');
+      alert('Préstamo registrado');
     }
   }
 
@@ -179,13 +187,19 @@ export default function Home() {
     const aplicadoInteres = Math.min(montoAbonado, totalInteresPendiente);
     const aplicadoCapital = Math.max(0, montoAbonado - aplicadoInteres);
 
-    const { error: errPago } = await supabase.from('pagos').insert([{
+    const payloadPago: any = {
       prestamo_id: prestamo.id,
       monto_total: montoAbonado,
       aplicado_interes: aplicadoInteres,
       aplicado_capital: aplicadoCapital,
       notas: `Método: ${nuevoPago.metodo_pago}`
-    }]);
+    };
+
+    if (nuevoPago.fecha_pago) {
+      payloadPago.fecha_pago = nuevoPago.fecha_pago;
+    }
+
+    const { error: errPago } = await supabase.from('pagos').insert([payloadPago]);
 
     if (errPago) return alert('Error al registrar pago: ' + errPago.message);
 
@@ -211,12 +225,12 @@ export default function Home() {
       remanente -= aDescontar;
     }
 
-    setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy' });
+    setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
     cargarDatos();
-    alert('Pago procesado correctamente');
+    alert('Pago registrado correctamente');
   }
 
-  // Métricas Dashboard
+  // Métricas
   const totalCapitalColocado = prestamos.reduce((acc, curr) => acc + Number(curr.monto_original || 0), 0);
   const totalCapitalPendiente = prestamos.reduce((acc, curr) => acc + Number(curr.capital_pendiente || 0), 0);
   const totalInteresCobrado = pagos.reduce((acc, curr) => acc + Number(curr.aplicado_interes || 0), 0);
@@ -228,166 +242,152 @@ export default function Home() {
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-12 tracking-normal">
-      {/* HEADER CORPORATIVO */}
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-1.5 bg-sky-500 rounded-full"></div>
-            <h1 className="text-xl font-extrabold tracking-wider text-slate-100 uppercase">CRM Préstamos</h1>
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans pb-24">
+      <div className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
+        <header className="flex justify-between items-center">
+          <div>
+            <p className="text-xs text-slate-500 font-medium">Bienvenido de vuelta</p>
+            <h1 className="text-xl font-bold text-slate-900">CRM Préstamos</h1>
           </div>
-          <nav className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 text-xs font-semibold">
-            {(['dashboard', 'clientes', 'prestamos', 'pagos'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2.5 rounded-lg transition-all duration-200 capitalize ${
-                  activeTab === tab ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/20' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {tab === 'pagos' ? 'Cobros' : tab}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </header>
+          <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
+            CRM
+          </div>
+        </header>
 
-      <main className="max-w-7xl mx-auto px-6 mt-8 space-y-8">
-        {loading && <p className="text-center text-slate-400 py-16 font-medium">Cargando base de datos...</p>}
+        <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs text-slate-400 font-medium">Capital Activo Pendiente</p>
+              <p className="text-3xl font-extrabold mt-1">${totalCapitalPendiente.toFixed(2)}</p>
+            </div>
+            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full font-semibold border border-emerald-500/30">
+              ${totalInteresCobrado.toFixed(2)} Cobrado
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-800 text-xs">
+            <div>
+              <p className="text-slate-400">Total Colocado</p>
+              <p className="font-bold text-slate-200">${totalCapitalColocado.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">Interés Pendiente</p>
+              <p className="font-bold text-amber-400">${totalInteresPendiente.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">En Mora</p>
+              <p className="font-bold text-red-400">${totalInteresAtrasado.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-4xl mx-auto px-4 mt-6">
+        {loading && <p className="text-center text-slate-500 py-12 text-sm">Cargando información...</p>}
 
         {!loading && activeTab === 'dashboard' && (
-          <div className="space-y-8">
-            {/* TARJETAS RESUMEN SOBRIAS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Capital Colocado</p>
-                <p className="text-2xl font-bold text-slate-100 mt-2">${totalCapitalColocado.toFixed(2)}</p>
-              </div>
-              <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por Recuperar</p>
-                <p className="text-2xl font-bold text-sky-400 mt-2">${totalCapitalPendiente.toFixed(2)}</p>
-              </div>
-              <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Interés Ganado</p>
-                <p className="text-2xl font-bold text-emerald-400 mt-2">${totalInteresCobrado.toFixed(2)}</p>
-              </div>
-              <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Interés Por Cobrar</p>
-                <p className="text-2xl font-bold text-amber-400 mt-2">${totalInteresPendiente.toFixed(2)}</p>
-              </div>
-              <div className="bg-slate-900/60 p-5 rounded-xl border border-red-900/30">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-red-400">En Mora (+10 Días)</p>
-                <p className="text-2xl font-bold text-red-500 mt-2">${totalInteresAtrasado.toFixed(2)}</p>
-              </div>
-            </div>
-
-            {/* TABLA PRINCIPAL DE PRÉSTAMOS */}
-            <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-6 space-y-4">
-              <h2 className="text-base font-bold uppercase tracking-wider text-slate-200">Préstamos en Curso</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Cliente / Cédula</th>
-                      <th className="py-3 px-4">Monto Orig.</th>
-                      <th className="py-3 px-4">Saldo Capital</th>
-                      <th className="py-3 px-4">Tasa</th>
-                      <th className="py-3 px-4">Esquema</th>
-                      <th className="py-3 px-4">Estado Cliente</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {prestamos.map((p) => {
-                      const est = getEstadoCliente(p.cliente_id);
-                      return (
-                        <tr key={p.id} className="hover:bg-slate-800/20">
-                          <td className="py-3 px-4">
-                            <p className="font-bold text-slate-100">{p.clientes?.nombre_completo || 'N/A'}</p>
-                            <p className="text-[10px] text-slate-400">Cédula: {p.clientes?.cedula || 'N/A'}</p>
-                          </td>
-                          <td className="py-3 px-4">${Number(p.monto_original).toFixed(2)}</td>
-                          <td className="py-3 px-4 font-bold text-sky-400">${Number(p.capital_pendiente).toFixed(2)}</td>
-                          <td className="py-3 px-4">{p.tasa_quincenal}%</td>
-                          <td className="py-3 px-4"><span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">{p.esquema_cobro}</span></td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.color}`}>
-                              {est.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+            <h2 className="text-base font-bold text-slate-900">Préstamos Activos</h2>
+            <div className="divide-y divide-slate-100">
+              {prestamos.map((p) => {
+                const est = getEstadoCliente(p.cliente_id);
+                return (
+                  <div key={p.id} className="py-4 flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{p.clientes?.nombre_completo || 'N/A'}</p>
+                      <p className="text-slate-500 mt-0.5">Cédula: {p.clientes?.cedula || 'N/A'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-slate-900 text-sm">${Number(p.capital_pendiente).toFixed(2)}</p>
+                      <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${est.color}`}>
+                        {est.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {prestamos.length === 0 && <p className="text-slate-400 py-4 text-xs text-center">No hay préstamos activos.</p>}
             </div>
           </div>
         )}
 
-        {/* PESTAÑA CLIENTES */}
         {!loading && activeTab === 'clientes' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <form onSubmit={handleCrearCliente} className="bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80 space-y-4 h-fit">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Nuevo Cliente</h2>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Nombre Completo *</label>
-                <input 
-                  type="text" 
-                  value={nuevoCliente.nombre_completo} 
-                  onChange={e => setNuevoCliente({...nuevoCliente, nombre_completo: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                  placeholder="Juan Pérez"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Cédula *</label>
-                <input 
-                  type="text" 
-                  value={nuevoCliente.cedula} 
-                  onChange={e => setNuevoCliente({...nuevoCliente, cedula: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                  placeholder="8-888-8888"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Teléfono (Celular) *</label>
-                <input 
-                  type="text" 
-                  value={nuevoCliente.telefono} 
-                  onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                  placeholder="6666-6666"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Dirección</label>
-                <input 
-                  type="text" 
-                  value={nuevoCliente.direccion} 
-                  onChange={e => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                  placeholder="Panamá"
-                />
-              </div>
-              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-500 text-white font-semibold py-3 rounded-xl text-xs transition">
-                Registrar Cliente
-              </button>
-            </form>
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+              <h2 className="text-base font-bold text-slate-900">Registrar Nuevo Cliente</h2>
+              <form onSubmit={handleCrearCliente} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-medium text-slate-600 mb-1">Nombre Completo *</label>
+                  <input 
+                    type="text" 
+                    value={nuevoCliente.nombre_completo} 
+                    onChange={e => setNuevoCliente({...nuevoCliente, nombre_completo: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                    placeholder="Juan Pérez"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-medium text-slate-600 mb-1">Cédula *</label>
+                    <input 
+                      type="text" 
+                      value={nuevoCliente.cedula} 
+                      onChange={e => setNuevoCliente({...nuevoCliente, cedula: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                      placeholder="8-888-8888"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-600 mb-1">Teléfono *</label>
+                    <input 
+                      type="text" 
+                      value={nuevoCliente.telefono} 
+                      onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                      placeholder="6666-6666"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-medium text-slate-600 mb-1">Dirección</label>
+                  <input 
+                    type="text" 
+                    value={nuevoCliente.direccion} 
+                    onChange={e => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                    placeholder="Panamá"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition mt-2">
+                  Guardar Cliente
+                </button>
+              </form>
+            </div>
 
-            <div className="lg:col-span-2 bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80 space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Directorio de Clientes ({clientes.length})</h2>
-              <div className="divide-y divide-slate-800/40">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+              <h2 className="text-base font-bold text-slate-900">Directorio de Clientes ({clientes.length})</h2>
+              <div className="divide-y divide-slate-100">
                 {clientes.map(c => {
                   const est = getEstadoCliente(c.id);
                   return (
-                    <div key={c.id} className="py-4 flex justify-between items-center">
+                    <div key={c.id} className="py-3 flex justify-between items-center text-xs">
                       <div>
-                        <p className="font-bold text-slate-100 text-sm">{c.nombre_completo}</p>
-                        <p className="text-xs text-slate-400">Cédula: <strong className="text-slate-300">{c.cedula || 'N/A'}</strong> | Celular: {c.telefono}</p>
+                        <p className="font-bold text-slate-900">{c.nombre_completo}</p>
+                        <p className="text-slate-500">Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${est.color}`}>
-                        {est.label}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${est.color}`}>
+                          {est.label}
+                        </span>
+                        
+                        {/* AQUÍ ESTÁ EL BOTÓN PARA BORRAR CLIENTE */}
+                        <button 
+                          onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
+                          className="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-lg font-bold text-[10px]"
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -396,17 +396,16 @@ export default function Home() {
           </div>
         )}
 
-        {/* PESTAÑA PRÉSTAMOS */}
         {!loading && activeTab === 'prestamos' && (
-          <div className="max-w-xl mx-auto bg-slate-900/60 p-8 rounded-2xl border border-slate-800/80 space-y-6">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Crear Nuevo Préstamo</h2>
-            <form onSubmit={handleCrearPrestamo} className="space-y-4">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+            <h2 className="text-base font-bold text-slate-900">Nuevo Préstamo</h2>
+            <form onSubmit={handleCrearPrestamo} className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Cliente *</label>
+                <label className="block font-medium text-slate-600 mb-1">Cliente *</label>
                 <select 
                   value={nuevoPrestamo.cliente_id} 
                   onChange={e => setNuevoPrestamo({...nuevoPrestamo, cliente_id: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
                 >
                   <option value="">-- Selecciona Cliente --</option>
                   {clientes.map(c => (
@@ -415,35 +414,35 @@ export default function Home() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Monto ($) *</label>
+                  <label className="block font-medium text-slate-600 mb-1">Monto ($) *</label>
                   <input 
                     type="number" 
                     value={nuevoPrestamo.monto_original} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, monto_original: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
                     placeholder="1000.00"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Tasa Quincenal (%) *</label>
+                  <label className="block font-medium text-slate-600 mb-1">Tasa Quincenal (%) *</label>
                   <input 
                     type="number" 
                     value={nuevoPrestamo.tasa_quincenal} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, tasa_quincenal: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Esquema Cobro *</label>
+                  <label className="block font-medium text-slate-600 mb-1">Esquema Cobro *</label>
                   <select 
                     value={nuevoPrestamo.esquema_cobro} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, esquema_cobro: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
                   >
                     <option value="5_20">Días 5 y 20</option>
                     <option value="10_25">Días 10 y 25</option>
@@ -451,107 +450,118 @@ export default function Home() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Fecha Desembolso *</label>
+                  <label className="block font-medium text-slate-600 mb-1">Fecha Desembolso *</label>
                   <input 
                     type="date" 
                     value={nuevoPrestamo.fecha_inicio} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, fecha_inicio: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
                   />
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-500 text-white font-semibold py-3 rounded-xl text-xs transition mt-2">
+              <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition mt-2">
                 Generar Préstamo
               </button>
             </form>
           </div>
         )}
 
-        {/* PESTAÑA COBROS / PAGOS */}
         {!loading && activeTab === 'pagos' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <form onSubmit={handleRegistrarPago} className="bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80 space-y-4 h-fit">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Registrar Cobro</h2>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Préstamo Activo *</label>
-                <select 
-                  value={nuevoPago.prestamo_id} 
-                  onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                >
-                  <option value="">-- Selecciona Préstamo --</option>
-                  {prestamos.filter(p => p.estado === 'activo').map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.clientes?.nombre_completo} (Cédula: {p.clientes?.cedula}) - Saldo: ${Number(p.capital_pendiente).toFixed(2)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Monto Cobrado ($) *</label>
-                <input 
-                  type="number" 
-                  value={nuevoPago.monto_total} 
-                  onChange={e => setNuevoPago({...nuevoPago, monto_total: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                  placeholder="50.00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Método de Pago *</label>
-                <select 
-                  value={nuevoPago.metodo_pago} 
-                  onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-                >
-                  <option value="Yappy">Yappy</option>
-                  <option value="ACH">ACH (Transferencia)</option>
-                </select>
-              </div>
-
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl text-xs transition">
-                Procesar Cobro
-              </button>
-            </form>
-
-            <div className="lg:col-span-2 bg-slate-900/60 p-6 rounded-2xl border border-slate-800/80 space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Historial de Cobros</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Fecha</th>
-                      <th className="py-3 px-4">Cliente / Cédula</th>
-                      <th className="py-3 px-4">Monto Total</th>
-                      <th className="py-3 px-4">A Interés</th>
-                      <th className="py-3 px-4">A Capital</th>
-                      <th className="py-3 px-4">Método</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {pagos.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-800/20">
-                        <td className="py-3 px-4 text-slate-400">{new Date(p.fecha_pago).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 font-bold text-slate-100">
-                          {p.prestamos?.clientes?.nombre_completo || 'N/A'}
-                          <p className="text-[10px] text-slate-400 font-normal">Cédula: {p.prestamos?.clientes?.cedula || 'N/A'}</p>
-                        </td>
-                        <td className="py-3 px-4 font-bold text-emerald-400">${Number(p.monto_total).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-amber-400">${Number(p.aplicado_interes).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-sky-400">${Number(p.aplicado_capital).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-slate-300"><span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">{p.notas}</span></td>
-                      </tr>
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+              <h2 className="text-base font-bold text-slate-900">Registrar Cobro</h2>
+              <form onSubmit={handleRegistrarPago} className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-medium text-slate-600 mb-1">Préstamo Activo *</label>
+                  <select 
+                    value={nuevoPago.prestamo_id} 
+                    onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                  >
+                    <option value="">-- Selecciona Préstamo --</option>
+                    {prestamos.filter(p => p.estado === 'activo').map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.clientes?.nombre_completo} (Cédula: {p.clientes?.cedula}) - Saldo: ${Number(p.capital_pendiente).toFixed(2)}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-medium text-slate-600 mb-1">Monto ($) *</label>
+                    <input 
+                      type="number" 
+                      value={nuevoPago.monto_total} 
+                      onChange={e => setNuevoPago({...nuevoPago, monto_total: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                      placeholder="50.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-600 mb-1">Método de Pago *</label>
+                    <select 
+                      value={nuevoPago.metodo_pago} 
+                      onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                    >
+                      <option value="Yappy">Yappy</option>
+                      <option value="ACH">ACH (Transferencia)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-600 mb-1">Fecha Real de Pago (Opcional si es retroactivo)</label>
+                  <input 
+                    type="date" 
+                    value={nuevoPago.fecha_pago} 
+                    onChange={e => setNuevoPago({...nuevoPago, fecha_pago: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:border-slate-900"
+                  />
+                </div>
+
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition mt-2">
+                  Procesar Cobro
+                </button>
+              </form>
+            </div>
+
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+              <h2 className="text-base font-bold text-slate-900">Historial de Cobros</h2>
+              <div className="divide-y divide-slate-100">
+                {pagos.map((p) => (
+                  <div key={p.id} className="py-3 flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
+                      <p className="text-slate-500">{new Date(p.fecha_pago).toLocaleDateString()} | {p.notas}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-emerald-600 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
+                      <p className="text-[10px] text-slate-400">Int: ${Number(p.aplicado_interes).toFixed(2)} \vert{} Cap:${Number(p.aplicado_capital).toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
       </main>
+
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-full p-1.5 shadow-2xl flex items-center gap-1 border border-slate-800 z-50">
+        {(['dashboard', 'clientes', 'prestamos', 'pagos'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 rounded-full text-xs font-semibold capitalize transition ${
+              activeTab === tab ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            {tab === 'pagos' ? 'Cobros' : tab}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
