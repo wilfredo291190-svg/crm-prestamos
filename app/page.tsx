@@ -294,7 +294,7 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // CAJA BLANCA CON TEXTO NEGRO PURO (100% VISIBLE Y LEGIBLE)
+  // CAJA BLANCA CON TEXTO NEGRO PURO (100% VISIBLE)
   const fieldInputStyle = "w-full !bg-white !text-black border border-gray-300 rounded-xl p-3.5 font-bold text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   return (
@@ -416,3 +416,332 @@ export default function Home() {
                         value={nuevoCliente.telefono} 
                         onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
                         className={fieldInputStyle}
+                        placeholder="6666-6666"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-300 mb-1">Dirección</label>
+                    <input 
+                      type="text" 
+                      value={nuevoCliente.direccion} 
+                      onChange={e => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="Panamá"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
+                    Guardar Cliente
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+                <h2 className="text-base font-bold text-white">Directorio de Clientes ({clientes.length})</h2>
+                <div className="divide-y divide-gray-800">
+                  {clientes.map(c => {
+                    const est = getEstadoCliente(c.id);
+                    return (
+                      <div key={c.id} className="py-3 flex justify-between items-center text-xs">
+                        <div>
+                          <p className="font-bold text-white">{c.nombre_completo}</p>
+                          <p className="text-gray-400 mt-0.5">Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${est.color}`}>
+                            {est.label}
+                          </span>
+                          <button 
+                            onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
+                            className="text-red-400 hover:text-red-300 bg-red-950/50 border border-red-800/50 px-2.5 py-1 rounded-lg font-bold text-[10px] transition hover:bg-red-900/80"
+                          >
+                            Borrar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'prestamos' && (
+            <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <h2 className="text-base font-bold text-white">Nuevo Préstamo</h2>
+              <form onSubmit={handleCrearPrestamo} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Cliente *</label>
+                  <select 
+                    value={nuevoPrestamo.cliente_id} 
+                    onChange={e => setNuevoPrestamo({...nuevoPrestamo, cliente_id: e.target.value})}
+                    className={fieldInputStyle}
+                  >
+                    <option value="" className="text-gray-700">-- Selecciona Cliente --</option>
+                    {clientes.map(c => (
+                      <option key={c.id} value={c.id} className="text-black font-semibold">{c.nombre_completo} (Cédula: {c.cedula})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-300 mb-1">Monto ($) *</label>
+                    <input 
+                      type="number" 
+                      value={nuevoPrestamo.monto_original} 
+                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, monto_original: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="1000.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-300 mb-1">Tasa Quincenal (%) *</label>
+                    <input 
+                      type="number" 
+                      value={nuevoPrestamo.tasa_quincenal} 
+                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, tasa_quincenal: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="Ej: 5 o 10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Esquema Cobro *</label>
+                  <select 
+                    value={nuevoPrestamo.esquema_cobro} 
+                    onChange={e => setNuevoPrestamo({...nuevoPrestamo, esquema_cobro: e.target.value})}
+                    className={fieldInputStyle}
+                  >
+                    <option value="5_20" className="text-black font-semibold">Días 5 y 20</option>
+                    <option value="10_25" className="text-black font-semibold">Días 10 y 25</option>
+                    <option value="15_30" className="text-black font-semibold">Días 15 y 30</option>
+                  </select>
+                </div>
+
+                {/* CAMPO DE FECHA EN FORMATO LATINO (dd/mm/aaaa) */}
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Fecha Desembolso (dd/mm/aaaa) *</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="31"
+                      value={nuevoPrestamo.dia} 
+                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, dia: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="DD (ej: 15)"
+                    />
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="12"
+                      value={nuevoPrestamo.mes} 
+                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, mes: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="MM (ej: 10)"
+                    />
+                    <input 
+                      type="number" 
+                      value={nuevoPrestamo.anio} 
+                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, anio: e.target.value})}
+                      className={fieldInputStyle}
+                      placeholder="AAAA (ej: 2026)"
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
+                  Generar Préstamo
+                </button>
+              </form>
+            </div>
+          )}
+
+          {!loading && activeTab === 'pagos' && (
+            <div className="space-y-6">
+              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+                <h2 className="text-base font-bold text-white">Registrar Cobro</h2>
+                <form onSubmit={handleRegistrarPago} className="space-y-4 text-xs">
+                  <div>
+                    <label className="block font-semibold text-gray-300 mb-1">Préstamo Activo *</label>
+                    <select 
+                      value={nuevoPago.prestamo_id} 
+                      onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
+                      className={fieldInputStyle}
+                    >
+                      <option value="" className="text-gray-700">-- Selecciona Préstamo --</option>
+                      {prestamos.filter(p => p.estado === 'activo').map(p => (
+                        <option key={p.id} value={p.id} className="text-black font-semibold">
+                          {p.clientes?.nombre_completo} (Cédula: {p.clientes?.cedula}) - Saldo: ${Number(p.capital_pendiente).toFixed(2)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-gray-300 mb-1">Monto ($) *</label>
+                      <input 
+                        type="number" 
+                        value={nuevoPago.monto_total} 
+                        onChange={e => setNuevoPago({...nuevoPago, monto_total: e.target.value})}
+                        className={fieldInputStyle}
+                        placeholder="50.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-gray-300 mb-1">Método de Pago *</label>
+                      <select 
+                        value={nuevoPago.metodo_pago} 
+                        onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
+                        className={fieldInputStyle}
+                      >
+                        <option value="Yappy" className="text-black font-semibold">Yappy</option>
+                        <option value="ACH" className="text-black font-semibold">ACH (Transferencia)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* FECHA LATINA DE PAGO (dd/mm/aaaa) */}
+                  <div>
+                    <label className="block font-semibold text-gray-300 mb-1">Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="31"
+                        value={nuevoPago.dia} 
+                        onChange={e => setNuevoPago({...nuevoPago, dia: e.target.value})}
+                        className={fieldInputStyle}
+                        placeholder="DD"
+                      />
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="12"
+                        value={nuevoPago.mes} 
+                        onChange={e => setNuevoPago({...nuevoPago, mes: e.target.value})}
+                        className={fieldInputStyle}
+                        placeholder="MM"
+                      />
+                      <input 
+                        type="number" 
+                        value={nuevoPago.anio} 
+                        onChange={e => setNuevoPago({...nuevoPago, anio: e.target.value})}
+                        className={fieldInputStyle}
+                        placeholder="AAAA"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg">
+                    Procesar Cobro
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+                <h2 className="text-base font-bold text-white">Historial de Cobros</h2>
+                <div className="divide-y divide-gray-800">
+                  {pagos.map((p) => (
+                    <div key={p.id} className="py-3 flex justify-between items-center text-xs">
+                      <div>
+                        <p className="font-bold text-white">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
+                        <p className="text-gray-400 mt-0.5">{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-emerald-400 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-600 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'csv' && (
+            <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <h2 className="text-base font-bold text-white">Importación Masiva de Clientes (CSV)</h2>
+              <p className="text-xs text-gray-400">
+                Pega la lista desde Excel en formato separado por comas:
+                <br />
+                <code className="bg-gray-950 px-2 py-1 rounded text-[10px] text-gray-300 font-mono mt-1 block">
+                  Nombre Completo, Cedula, Telefono, Direccion
+                </code>
+              </p>
+              <form onSubmit={handleCargarCSV} className="space-y-3 text-xs">
+                <textarea
+                  rows={6}
+                  value={csvTexto}
+                  onChange={e => setCsvTexto(e.target.value)}
+                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon"
+                  className={fieldInputStyle}
+                />
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-md">
+                  Cargar Lista de Clientes
+                </button>
+              </form>
+            </div>
+          )}
+        </main>
+
+      </div>
+
+      {/* --- COMPONENTE MODAL/POPUP CUSTOM PWA (DARK MODE) --- */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+            
+            <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
+              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
+              {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
+              {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">✕</span>}
+              {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-full flex items-center justify-center">ℹ</span>}
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white">{modalConfig.titulo}</h3>
+              <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
+            </div>
+
+            <div className="flex gap-2 pt-2 text-xs font-semibold">
+              {modalConfig.tipo === 'confirmacion' ? (
+                <>
+                  <button
+                    onClick={cerrarModal}
+                    className="w-1/2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      cerrarModal();
+                      if (modalConfig.onAceptar) modalConfig.onAceptar();
+                    }}
+                    className="w-1/2 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl transition shadow-md"
+                  >
+                    Confirmar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={cerrarModal}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md"
+                >
+                  Entendido
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
