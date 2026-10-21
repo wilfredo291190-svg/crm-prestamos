@@ -13,16 +13,16 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Campos del Formulario de Auth
-  const [authEmail, setAuthEmail] = useState('');
+  // Campos del Formulario de Auth (Permite Usuario o Email)
+  const [authIdentifier, setAuthIdentifier] = useState(''); // Nombre de usuario o Email
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   
-  // Datos Adicionales de Registro
+  // Datos de Registro
+  const [regUsername, setRegUsername] = useState('');
   const [regNombre, setRegNombre] = useState('');
-  const [regEmpresa, setRegEmpresa] = useState('');
-  const [regTelefono, setRegTelefono] = useState('');
+  const [regEmail, setRegEmail] = useState('');
 
   // Estados de CRM
   const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv'>('dashboard');
@@ -115,9 +115,6 @@ export default function Home() {
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
-    if (!authEmail || !authPassword) {
-      return mostrarAlerta('Campos Requeridos', 'Por favor ingresa tu correo y contraseña.', 'alerta');
-    }
 
     if (authPassword.length < 8) {
       return mostrarAlerta('Contraseña Muy Corta', 'La contraseña debe tener mínimo 8 caracteres.', 'alerta');
@@ -127,22 +124,21 @@ export default function Home() {
 
     try {
       if (isRegistering) {
-        if (!regNombre || !regEmpresa) {
+        if (!regUsername || !regNombre || !regEmail) {
           setIsSubmitting(false);
-          return mostrarAlerta('Datos Incompletos', 'Por favor ingresa tu Nombre y el Nombre de tu Empresa.', 'alerta');
+          return mostrarAlerta('Datos Incompletos', 'Por favor ingresa tu Usuario, Nombre Completo y Correo Electrónico.', 'alerta');
         }
 
         const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://prestao-app.vercel.app';
         
         const { data, error } = await supabase.auth.signUp({
-          email: authEmail,
+          email: regEmail,
           password: authPassword,
           options: {
             emailRedirectTo: redirectUrl,
             data: {
+              username: regUsername.toLowerCase().trim(),
               nombre_completo: regNombre,
-              empresa: regEmpresa,
-              telefono: regTelefono
             }
           }
         });
@@ -151,7 +147,7 @@ export default function Home() {
 
         if (error) {
           if (error.message.includes('already registered') || error.message.includes('User already exists')) {
-            mostrarAlerta('Correo Ya Registrado', 'Este correo electrónico ya tiene una cuenta activa. Por favor inicia sesión.', 'error');
+            mostrarAlerta('Cuenta Existente', 'Este correo o usuario ya se encuentra registrado.', 'error');
           } else {
             mostrarAlerta('Error de Registro', error.message, 'error');
           }
@@ -160,21 +156,37 @@ export default function Home() {
         } else {
           mostrarAlerta(
             'Verificación Enviada', 
-            `Hemos enviado un correo de confirmación a ${authEmail}. Haz clic en el enlace del mensaje para activar tu cuenta.`, 
+            `Hemos enviado un correo de confirmación a ${regEmail}. Revisa tu bandeja para activar tu cuenta.`, 
             'exito'
           );
           setIsRegistering(false);
         }
       } else {
+        // PERMITIR LOGIN CON USERNAME O EMAIL
+        let emailToLogin = authIdentifier.trim();
+
+        if (!emailToLogin.includes('@')) {
+          // Si el usuario escribió un username, buscamos el email asociado
+          const { data: userMeta } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', emailToLogin.toLowerCase())
+            .single();
+
+          if (userMeta?.email) {
+            emailToLogin = userMeta.email;
+          }
+        }
+
         const { error } = await supabase.auth.signInWithPassword({
-          email: authEmail,
+          email: emailToLogin,
           password: authPassword,
         });
 
         setIsSubmitting(false);
 
         if (error) {
-          mostrarAlerta('Error de Acceso', 'Credenciales incorrectas o correo no verificado.', 'error');
+          mostrarAlerta('Error de Acceso', 'Usuario/Correo o contraseña incorrectos.', 'error');
         }
       }
     } catch (err: any) {
@@ -421,7 +433,6 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
   const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   if (authLoading) {
@@ -451,7 +462,7 @@ export default function Home() {
         
         <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
           
-          {/* HEADER DEL PORTAL DE ENTRADA CON LOGO VECTORIAL HANDSHAKE */}
+          {/* LOGO VECTORIAL DE PRESTA'O */}
           <div className="text-center space-y-2">
             <div className="w-14 h-14 mx-auto bg-gray-950 rounded-2xl border border-gray-800 p-2.5 flex items-center justify-center shadow-lg">
               <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -465,9 +476,20 @@ export default function Home() {
 
           <form onSubmit={handleAuth} className="space-y-4 text-xs" autoComplete="off">
             
-            {/* CAMPOS ADICIONALES SOLO EN MODO REGISTRO */}
-            {isRegistering && (
+            {/* CAMPOS DE REGISTRO */}
+            {isRegistering ? (
               <>
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Nombre de Usuario *</label>
+                  <input 
+                    type="text" 
+                    value={regUsername} 
+                    onChange={e => setRegUsername(e.target.value)}
+                    className={fieldInputStyle}
+                    placeholder="ej: wilfredo29"
+                    required
+                  />
+                </div>
                 <div>
                   <label className="block font-semibold text-gray-300 mb-1">Nombre Completo *</label>
                   <input 
@@ -475,46 +497,35 @@ export default function Home() {
                     value={regNombre} 
                     onChange={e => setRegNombre(e.target.value)}
                     className={fieldInputStyle}
-                    placeholder="Ej: Juan Pérez"
-                    required={isRegistering}
+                    placeholder="Ej: Wilfredo Smith"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-gray-300 mb-1">Nombre Financiera / Empresa *</label>
+                  <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico *</label>
                   <input 
-                    type="text" 
-                    value={regEmpresa} 
-                    onChange={e => setRegEmpresa(e.target.value)}
+                    type="email" 
+                    value={regEmail} 
+                    onChange={e => setRegEmail(e.target.value)}
                     className={fieldInputStyle}
-                    placeholder="Ej: Inversiones Pérez"
-                    required={isRegistering}
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-gray-300 mb-1">Teléfono Móvil</label>
-                  <input 
-                    type="text" 
-                    value={regTelefono} 
-                    onChange={e => setRegTelefono(e.target.value)}
-                    className={fieldInputStyle}
-                    placeholder="Ej: 6666-6666"
+                    placeholder="correo@ejemplo.com"
+                    required
                   />
                 </div>
               </>
+            ) : (
+              <div>
+                <label className="block font-semibold text-gray-300 mb-1">Usuario o Correo Electrónico *</label>
+                <input 
+                  type="text" 
+                  value={authIdentifier} 
+                  onChange={e => setAuthIdentifier(e.target.value)}
+                  className={fieldInputStyle}
+                  placeholder="Usuario o correo"
+                  required
+                />
+              </div>
             )}
-
-            <div>
-              <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico *</label>
-              <input 
-                type="email" 
-                value={authEmail} 
-                onChange={e => setAuthEmail(e.target.value)}
-                className={fieldInputStyle}
-                placeholder="usuario@ejemplo.com"
-                autoComplete="new-email"
-                required
-              />
-            </div>
 
             <div>
               <div className="flex justify-between items-center mb-1">
@@ -528,7 +539,6 @@ export default function Home() {
                   onChange={e => setAuthPassword(e.target.value)}
                   className={fieldInputStyle}
                   placeholder="••••••••"
-                  autoComplete="new-password"
                   required
                 />
                 <button
@@ -568,7 +578,7 @@ export default function Home() {
             <button 
               onClick={() => {
                 setIsRegistering(!isRegistering);
-                setAuthEmail('');
+                setAuthIdentifier('');
                 setAuthPassword('');
               }}
               className="text-xs text-blue-400 hover:underline font-semibold"
@@ -578,7 +588,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MODAL PWA (DARK MODE) */}
+        {/* MODAL PWA */}
         {modalConfig.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
             <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
@@ -609,7 +619,7 @@ export default function Home() {
     );
   }
 
-  // --- VISTA 2: CRM DASHBOARD COMPLETO (SOLO USUARIOS LOGUEADOS) ---
+  // --- VISTA 2: CRM DASHBOARD COMPLETO ---
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-6 px-4">
       <style jsx global>{`
@@ -631,7 +641,7 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* NAVEGACIÓN SUPERIOR CON BOTONES NATIVOS RESPONSIVOS (SIN SCROLLBAR INCORPORADO) */}
+        {/* NAVEGACIÓN SUPERIOR */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
@@ -644,7 +654,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-lg font-extrabold text-white tracking-wide leading-none">Presta'o</h1>
-                <p className="text-[10px] text-gray-400 mt-0.5">{session?.user?.user_metadata?.empresa || 'Gestión de Créditos'}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Gestión Inteligente de Créditos</p>
               </div>
             </div>
             
@@ -656,7 +666,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* GRID RESPONSIVO INDEPENDIENTE PARA NAVEGACIÓN SIN "IFRAME" O SCROLL LATERAL */}
           <nav className="grid grid-cols-5 bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-semibold w-full sm:w-auto">
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
@@ -707,7 +716,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* SECCIONES */}
+        {/* SECCIONES DE TABS */}
         <main>
           {loading && <p className="text-center text-gray-400 py-12 text-sm font-medium">Cargando información...</p>}
 
@@ -875,7 +884,6 @@ export default function Home() {
                   </select>
                 </div>
 
-                {/* FECHA LATINA (DD/MM/AAAA) */}
                 <div>
                   <label className="block font-semibold text-gray-300 mb-1">Fecha Desembolso (dd/mm/aaaa) *</label>
                   <div className="grid grid-cols-3 gap-2">
@@ -886,7 +894,7 @@ export default function Home() {
                       value={nuevoPrestamo.dia} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, dia: e.target.value})}
                       className={fieldInputStyle}
-                      placeholder="DD (ej: 15)"
+                      placeholder="DD"
                     />
                     <input 
                       type="number" 
@@ -895,14 +903,14 @@ export default function Home() {
                       value={nuevoPrestamo.mes} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, mes: e.target.value})}
                       className={fieldInputStyle}
-                      placeholder="MM (ej: 10)"
+                      placeholder="MM"
                     />
                     <input 
                       type="number" 
                       value={nuevoPrestamo.anio} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, anio: e.target.value})}
                       className={fieldInputStyle}
-                      placeholder="AAAA (ej: 2026)"
+                      placeholder="AAAA"
                     />
                   </div>
                 </div>
@@ -959,7 +967,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* FECHA LATINA DE PAGO (DD/MM/AAAA) */}
                   <div>
                     <label className="block font-semibold text-gray-300 mb-1">Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
                     <div className="grid grid-cols-3 gap-2">
@@ -1048,7 +1055,7 @@ export default function Home() {
 
       </div>
 
-      {/* MODAL PWA (DARK MODE) */}
+      {/* MODAL PWA */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
@@ -1065,34 +1072,12 @@ export default function Home() {
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
             </div>
 
-            <div className="flex gap-2 pt-2 text-xs font-semibold">
-              {modalConfig.tipo === 'confirmacion' ? (
-                <>
-                  <button
-                    onClick={cerrarModal}
-                    className="w-1/2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-xl transition"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => {
-                      cerrarModal();
-                      if (modalConfig.onAceptar) modalConfig.onAceptar();
-                    }}
-                    className="w-1/2 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl transition shadow-md"
-                  >
-                    Confirmar
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={cerrarModal}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md font-bold text-xs"
-                >
-                  Entendido
-                </button>
-              )}
-            </div>
+            <button
+              onClick={cerrarModal}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md font-bold text-xs"
+            >
+              Entendido
+            </button>
 
           </div>
         </div>
