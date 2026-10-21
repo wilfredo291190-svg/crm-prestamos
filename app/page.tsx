@@ -11,7 +11,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv'>('dashboard');
   const [loading, setLoading] = useState(true);
 
-  // Estados
+  // Estados de Datos
   const [clientes, setClientes] = useState<any[]>([]);
   const [prestamos, setPrestamos] = useState<any[]>([]);
   const [quincenas, setQuincenas] = useState<any[]>([]);
@@ -23,11 +23,47 @@ export default function Home() {
   const [nuevoPago, setNuevoPago] = useState({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
   const [csvTexto, setCsvTexto] = useState('');
 
+  // --- SISTEMA DE MODALES Y ALERTAS CUSTOM (PWA DARK MODE) ---
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    tipo: 'alerta' | 'confirmacion' | 'exito' | 'error';
+    titulo: string;
+    mensaje: string;
+    onAceptar?: () => void;
+  }>({
+    isOpen: false,
+    tipo: 'alerta',
+    titulo: '',
+    mensaje: ''
+  });
+
+  function mostrarAlerta(titulo: string, mensaje: string, tipo: 'alerta' | 'exito' | 'error' = 'alerta') {
+    setModalConfig({
+      isOpen: true,
+      tipo,
+      titulo,
+      mensaje
+    });
+  }
+
+  function mostrarConfirmacion(titulo: string, mensaje: string, onAceptar: () => void) {
+    setModalConfig({
+      isOpen: true,
+      tipo: 'confirmacion',
+      titulo,
+      mensaje,
+      onAceptar
+    });
+  }
+
+  function cerrarModal() {
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
+  }
+
   useEffect(() => {
     cargarDatos();
   }, []);
 
-  // Cambio de pestaña suave con scroll al inicio
   function cambiarPestana(tab: 'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv') {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
@@ -83,7 +119,7 @@ export default function Home() {
   async function handleCrearCliente(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevoCliente.nombre_completo || !nuevoCliente.cedula || !nuevoCliente.telefono) {
-      return alert('Nombre, Cédula y Teléfono son obligatorios');
+      return mostrarAlerta('Campos Requeridos', 'Por favor ingresa Nombre, Cédula y Teléfono.', 'alerta');
     }
 
     const { error } = await supabase.from('clientes').insert([{
@@ -91,29 +127,34 @@ export default function Home() {
       telefono: formatearTelefono(nuevoCliente.telefono)
     }]);
 
-    if (error) alert('Error creando cliente: ' + error.message);
-    else {
+    if (error) {
+      mostrarAlerta('Error', 'No se pudo crear el cliente: ' + error.message, 'error');
+    } else {
       setNuevoCliente({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
       cargarDatos();
-      alert('Cliente registrado con éxito');
+      mostrarAlerta('Cliente Registrado', 'El cliente fue guardado correctamente en la cartera.', 'exito');
     }
   }
 
-  async function handleBorrarCliente(id: string, nombre: string) {
-    if (confirm(`¿Estás seguro de borrar a ${nombre}? Se eliminarán sus registros.`)) {
-      const { error } = await supabase.from('clientes').delete().eq('id', id);
-      if (error) {
-        alert('Error al borrar cliente: ' + error.message);
-      } else {
-        cargarDatos();
-        alert('Cliente eliminado correctamente');
+  function handleBorrarCliente(id: string, nombre: string) {
+    mostrarConfirmacion(
+      '¿Eliminar Cliente?',
+      `¿Estás seguro de eliminar a ${nombre}? Se borrarán sus registros y préstamos asociados.`,
+      async () => {
+        const { error } = await supabase.from('clientes').delete().eq('id', id);
+        if (error) {
+          mostrarAlerta('Error al eliminar', error.message, 'error');
+        } else {
+          cargarDatos();
+          mostrarAlerta('Cliente Eliminado', `${nombre} fue removido del sistema.`, 'exito');
+        }
       }
-    }
+    );
   }
 
   async function handleCargarCSV(e: React.FormEvent) {
     e.preventDefault();
-    if (!csvTexto.trim()) return alert('Pega el contenido del CSV');
+    if (!csvTexto.trim()) return mostrarAlerta('Archivo Vacío', 'Pega el texto del CSV para continuar.', 'alerta');
 
     const filas = csvTexto.trim().split('\n');
     let creados = 0;
@@ -140,7 +181,7 @@ export default function Home() {
 
     setCsvTexto('');
     cargarDatos();
-    alert(`Se importaron ${creados} clientes con éxito.`);
+    mostrarAlerta('Carga Completada', `Se importaron ${creados} clientes exitosamente.`, 'exito');
   }
 
   async function handleCrearPrestamo(e: React.FormEvent) {
@@ -149,7 +190,7 @@ export default function Home() {
     const tasa = parseFloat(nuevoPrestamo.tasa_quincenal);
 
     if (!nuevoPrestamo.cliente_id || !monto || isNaN(tasa) || !nuevoPrestamo.fecha_inicio) {
-      return alert('Completa todos los campos requeridos incluyendo la tasa');
+      return mostrarAlerta('Formulario Incompleto', 'Por favor selecciona un cliente e ingresa monto, tasa y fecha.', 'alerta');
     }
 
     const { error } = await supabase.from('prestamos').insert([{
@@ -163,11 +204,11 @@ export default function Home() {
     }]);
 
     if (error) {
-      alert('Error creando préstamo: ' + error.message);
+      mostrarAlerta('Error', 'No se pudo generar el préstamo: ' + error.message, 'error');
     } else {
       setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '', esquema_cobro: '15_30', fecha_inicio: '' });
       cargarDatos();
-      alert('Préstamo registrado');
+      mostrarAlerta('Préstamo Generado', 'El crédito quedó registrado y activo.', 'exito');
     }
   }
 
@@ -176,7 +217,7 @@ export default function Home() {
     const prestamo = prestamos.find(p => p.id === nuevoPago.prestamo_id);
     const montoAbonado = parseFloat(nuevoPago.monto_total);
 
-    if (!prestamo || !montoAbonado) return alert('Selecciona préstamo e ingresa monto válido');
+    if (!prestamo || !montoAbonado) return mostrarAlerta('Selección Requerida', 'Selecciona un préstamo e ingresa un monto válido.', 'alerta');
 
     const fechaPagoEval = nuevoPago.fecha_pago ? new Date(nuevoPago.fecha_pago) : new Date();
     const fechaInicio = new Date(prestamo.fecha_inicio);
@@ -209,7 +250,7 @@ export default function Home() {
 
     const { error: errPago } = await supabase.from('pagos').insert([payloadPago]);
 
-    if (errPago) return alert('Error al registrar pago: ' + errPago.message);
+    if (errPago) return mostrarAlerta('Error de Pago', errPago.message, 'error');
 
     const nuevoCapitalPendiente = Math.max(0, Number(prestamo.capital_pendiente) - aplicadoCapital);
     const nuevoEstado = nuevoCapitalPendiente === 0 ? 'cancelado' : 'activo';
@@ -221,7 +262,11 @@ export default function Home() {
 
     setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
     cargarDatos();
-    alert(`Abono procesado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. Saldo restante: $${nuevoCapitalPendiente.toFixed(2)}`);
+    mostrarAlerta(
+      'Cobro Procesado', 
+      `Abonado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. Nuevo saldo restante: $${nuevoCapitalPendiente.toFixed(2)}`,
+      'exito'
+    );
   }
 
   // Métricas
@@ -235,17 +280,20 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
+  // Estilos uniformes de Inputs para contraste 100% visible
+  const inputStyle = "w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white placeholder-gray-500 font-medium text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all";
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-6 px-4">
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* CABECERA Y NAVEGACIÓN SUPERIOR UNIFICADA */}
+        {/* CABECERA Y NAVEGACIÓN SUPERIOR */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md">
-              CRM
+              P
             </div>
-            <h1 className="text-lg font-bold text-white tracking-wide">CRM Préstamos</h1>
+            <h1 className="text-lg font-bold text-white tracking-wide">Presta'o</h1>
           </div>
 
           <nav className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-medium w-full sm:w-auto justify-center overflow-x-auto">
@@ -332,7 +380,7 @@ export default function Home() {
                       type="text" 
                       value={nuevoCliente.nombre_completo} 
                       onChange={e => setNuevoCliente({...nuevoCliente, nombre_completo: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                       placeholder="Juan Pérez"
                     />
                   </div>
@@ -343,7 +391,7 @@ export default function Home() {
                         type="text" 
                         value={nuevoCliente.cedula} 
                         onChange={e => setNuevoCliente({...nuevoCliente, cedula: e.target.value})}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        className={inputStyle}
                         placeholder="8-888-8888"
                       />
                     </div>
@@ -353,7 +401,7 @@ export default function Home() {
                         type="text" 
                         value={nuevoCliente.telefono} 
                         onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        className={inputStyle}
                         placeholder="6666-6666"
                       />
                     </div>
@@ -364,7 +412,7 @@ export default function Home() {
                       type="text" 
                       value={nuevoCliente.direccion} 
                       onChange={e => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                       placeholder="Panamá"
                     />
                   </div>
@@ -391,7 +439,7 @@ export default function Home() {
                           </span>
                           <button 
                             onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
-                            className="text-red-400 hover:text-red-300 bg-red-950/40 p-1.5 rounded-lg font-bold text-[10px]"
+                            className="text-red-400 hover:text-red-300 bg-red-950/40 border border-red-800/40 px-2.5 py-1 rounded-lg font-bold text-[10px] transition hover:bg-red-900/60"
                           >
                             Borrar
                           </button>
@@ -413,11 +461,11 @@ export default function Home() {
                   <select 
                     value={nuevoPrestamo.cliente_id} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, cliente_id: e.target.value})}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                    className={inputStyle}
                   >
-                    <option value="">-- Selecciona Cliente --</option>
+                    <option value="" className="bg-gray-950 text-white">-- Selecciona Cliente --</option>
                     {clientes.map(c => (
-                      <option key={c.id} value={c.id}>{c.nombre_completo} (Cédula: {c.cedula})</option>
+                      <option key={c.id} value={c.id} className="bg-gray-950 text-white">{c.nombre_completo} (Cédula: {c.cedula})</option>
                     ))}
                   </select>
                 </div>
@@ -429,7 +477,7 @@ export default function Home() {
                       type="number" 
                       value={nuevoPrestamo.monto_original} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, monto_original: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                       placeholder="1000.00"
                     />
                   </div>
@@ -439,7 +487,7 @@ export default function Home() {
                       type="number" 
                       value={nuevoPrestamo.tasa_quincenal} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, tasa_quincenal: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                       placeholder="Ej: 5 o 10"
                     />
                   </div>
@@ -451,11 +499,11 @@ export default function Home() {
                     <select 
                       value={nuevoPrestamo.esquema_cobro} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, esquema_cobro: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                     >
-                      <option value="5_20">Días 5 y 20</option>
-                      <option value="10_25">Días 10 y 25</option>
-                      <option value="15_30">Días 15 y 30</option>
+                      <option value="5_20" className="bg-gray-950 text-white">Días 5 y 20</option>
+                      <option value="10_25" className="bg-gray-950 text-white">Días 10 y 25</option>
+                      <option value="15_30" className="bg-gray-950 text-white">Días 15 y 30</option>
                     </select>
                   </div>
                   <div>
@@ -464,7 +512,7 @@ export default function Home() {
                       type="date" 
                       value={nuevoPrestamo.fecha_inicio} 
                       onChange={e => setNuevoPrestamo({...nuevoPrestamo, fecha_inicio: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                     />
                   </div>
                 </div>
@@ -486,11 +534,11 @@ export default function Home() {
                     <select 
                       value={nuevoPago.prestamo_id} 
                       onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                     >
-                      <option value="">-- Selecciona Préstamo --</option>
+                      <option value="" className="bg-gray-950 text-white">-- Selecciona Préstamo --</option>
                       {prestamos.filter(p => p.estado === 'activo').map(p => (
-                        <option key={p.id} value={p.id}>
+                        <option key={p.id} value={p.id} className="bg-gray-950 text-white">
                           {p.clientes?.nombre_completo} (Cédula: {p.clientes?.cedula}) - Saldo: ${Number(p.capital_pendiente).toFixed(2)}
                         </option>
                       ))}
@@ -504,7 +552,7 @@ export default function Home() {
                         type="number" 
                         value={nuevoPago.monto_total} 
                         onChange={e => setNuevoPago({...nuevoPago, monto_total: e.target.value})}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        className={inputStyle}
                         placeholder="50.00"
                       />
                     </div>
@@ -513,10 +561,10 @@ export default function Home() {
                       <select 
                         value={nuevoPago.metodo_pago} 
                         onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                        className={inputStyle}
                       >
-                        <option value="Yappy">Yappy</option>
-                        <option value="ACH">ACH (Transferencia)</option>
+                        <option value="Yappy" className="bg-gray-950 text-white">Yappy</option>
+                        <option value="ACH" className="bg-gray-950 text-white">ACH (Transferencia)</option>
                       </select>
                     </div>
                   </div>
@@ -527,11 +575,10 @@ export default function Home() {
                       type="date" 
                       value={nuevoPago.fecha_pago} 
                       onChange={e => setNuevoPago({...nuevoPago, fecha_pago: e.target.value})}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500"
+                      className={inputStyle}
                     />
                   </div>
 
-                  {/* BOTÓN AZUL UNIFICADO */}
                   <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg">
                     Procesar Cobro
                   </button>
@@ -576,7 +623,7 @@ export default function Home() {
                   value={csvTexto}
                   onChange={e => setCsvTexto(e.target.value)}
                   placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon"
-                  className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-white font-mono focus:outline-none focus:border-blue-500"
+                  className={inputStyle}
                 />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-md">
                   Cargar Lista de Clientes
@@ -587,6 +634,59 @@ export default function Home() {
         </main>
 
       </div>
+
+      {/* --- COMPONENTE MODAL/POPUP CUSTOM PWA (DARK MODE) --- */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center transform transition-all scale-100">
+            
+            {/* Ícono dinámico del Modal */}
+            <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
+              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
+              {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
+              {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">✕</span>}
+              {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-full flex items-center justify-center">ℹ</span>}
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white">{modalConfig.titulo}</h3>
+              <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
+            </div>
+
+            {/* Acciones */}
+            <div className="flex gap-2 pt-2 text-xs font-semibold">
+              {modalConfig.tipo === 'confirmacion' ? (
+                <>
+                  <button
+                    onClick={cerrarModal}
+                    className="w-1/2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      cerrarModal();
+                      if (modalConfig.onAceptar) modalConfig.onAceptar();
+                    }}
+                    className="w-1/2 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl transition shadow-md"
+                  >
+                    Confirmar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={cerrarModal}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md"
+                >
+                  Entendido
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
