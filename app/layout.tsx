@@ -10,7 +10,7 @@ const montserrat = Montserrat({
 
 export const metadata = {
   title: "Presta'o - CRM de Préstamos",
-  description: 'Sistema de gestión de préstamos personales sobre saldo insoluto',
+  description: 'Sistema de gestión de para micro préstamos personales',
   verification: {
     google: 'VGCvnxWNhrZuqkzmtywxIM0uI1KxVbSqB-Yvg7swx4U',
   },
