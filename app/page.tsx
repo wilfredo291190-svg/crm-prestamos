@@ -8,13 +8,21 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
-  // Estado de Sesión
+  // Estado de Sesión y Autenticación
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Campos del Formulario de Auth
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  
+  // Datos Adicionales de Registro
+  const [regNombre, setRegNombre] = useState('');
+  const [regEmpresa, setRegEmpresa] = useState('');
+  const [regTelefono, setRegTelefono] = useState('');
 
   // Estados de CRM
   const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv'>('dashboard');
@@ -73,17 +81,33 @@ export default function Home() {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
   }
 
+  // CÁLCULO DE FUERZA DE CONTRASEÑA
+  function calcularFuerzaPassword(pass: string) {
+    if (!pass) return { score: 0, label: '', color: 'bg-gray-800' };
+    let score = 0;
+    if (pass.length >= 8) score += 1;
+    if (/[A-Z]/.test(pass) || /[0-9]/.test(pass)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pass) && pass.length >= 8) score += 1;
+
+    if (score === 1) return { score: 1, label: 'Débil', color: 'bg-red-500' };
+    if (score === 2) return { score: 2, label: 'Media', color: 'bg-yellow-500' };
+    if (score === 3) return { score: 3, label: 'Fuerte', color: 'bg-emerald-500' };
+    return { score: 0, label: 'Muy Débil', color: 'bg-red-500' };
+  }
+
+  const fuerzaPass = calcularFuerzaPassword(authPassword);
+
   // VALIDAR SESIÓN DE SUPABASE
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
-      if (session) cargarDatos();
+      if (session) cargarDatos(session.user.id);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) cargarDatos();
+      if (session) cargarDatos(session.user.id);
     });
 
     return () => subscription.unsubscribe();
@@ -95,30 +119,48 @@ export default function Home() {
       return mostrarAlerta('Campos Requeridos', 'Por favor ingresa tu correo y contraseña.', 'alerta');
     }
 
+    if (authPassword.length < 8) {
+      return mostrarAlerta('Contraseña Muy Corta', 'La contraseña debe tener mínimo 8 caracteres.', 'alerta');
+    }
+
     setIsSubmitting(true);
 
     try {
       if (isRegistering) {
-        const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://crm-prestamos-507.vercel.app';
+        if (!regNombre || !regEmpresa) {
+          setIsSubmitting(false);
+          return mostrarAlerta('Datos Incompletos', 'Por favor ingresa tu Nombre y el Nombre de tu Empresa.', 'alerta');
+        }
+
+        const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://prestao-app.vercel.app';
         
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
           options: {
             emailRedirectTo: redirectUrl,
+            data: {
+              nombre_completo: regNombre,
+              empresa: regEmpresa,
+              telefono: regTelefono
+            }
           }
         });
         
         setIsSubmitting(false);
 
         if (error) {
-          mostrarAlerta('Error de Registro', error.message, 'error');
+          if (error.message.includes('already registered') || error.message.includes('User already exists')) {
+            mostrarAlerta('Correo Ya Registrado', 'Este correo electrónico ya tiene una cuenta activa. Por favor inicia sesión.', 'error');
+          } else {
+            mostrarAlerta('Error de Registro', error.message, 'error');
+          }
         } else if (data?.user && data?.session) {
           mostrarAlerta('Cuenta Creada', 'Bienvenido a Presta\'o. Tu sesión ha sido iniciada.', 'exito');
         } else {
           mostrarAlerta(
             'Verificación Enviada', 
-            `Hemos enviado un enlace de confirmación a ${authEmail}. Por favor revisa tu bandeja de entrada o spam para activar tu cuenta e iniciar sesión.`, 
+            `Hemos enviado un correo de confirmación a ${authEmail}. Haz clic en el enlace del mensaje para activar tu cuenta.`, 
             'exito'
           );
           setIsRegistering(false);
@@ -132,7 +174,7 @@ export default function Home() {
         setIsSubmitting(false);
 
         if (error) {
-          mostrarAlerta('Error de Acceso', 'Credenciales incorrectas o correo no verificado: ' + error.message, 'error');
+          mostrarAlerta('Error de Acceso', 'Credenciales incorrectas o correo no verificado.', 'error');
         }
       }
     } catch (err: any) {
@@ -145,6 +187,9 @@ export default function Home() {
     mostrarConfirmacion('Cerrar Sesión', '¿Estás seguro de que deseas salir del sistema?', async () => {
       await supabase.auth.signOut();
       setSession(null);
+      setClientes([]);
+      setPrestamos([]);
+      setPagos([]);
     });
   }
 
@@ -155,17 +200,20 @@ export default function Home() {
     }
   }
 
-  async function cargarDatos() {
+  // CARGAR DATOS AISLADOS POR USUARIO (MULTITENANCY)
+  async function cargarDatos(userId?: string) {
     setLoading(true);
-    if (!supabaseUrl || !supabaseAnonKey) {
+    const activeUserId = userId || session?.user?.id;
+
+    if (!supabaseUrl || !supabaseAnonKey || !activeUserId) {
       setLoading(false);
       return;
     }
 
-    const { data: dataClientes } = await supabase.from('clientes').select('*').order('creado_en', { ascending: false });
-    const { data: dataPrestamos } = await supabase.from('prestamos').select('*, clientes(*)').order('creado_en', { ascending: false });
+    const { data: dataClientes } = await supabase.from('clientes').select('*').eq('user_id', activeUserId).order('creado_en', { ascending: false });
+    const { data: dataPrestamos } = await supabase.from('prestamos').select('*, clientes(*)').eq('user_id', activeUserId).order('creado_en', { ascending: false });
     const { data: dataQuincenas } = await supabase.from('quincenas_interes').select('*');
-    const { data: dataPagos } = await supabase.from('pagos').select('*, prestamos(*, clientes(*))').order('fecha_pago', { ascending: false });
+    const { data: dataPagos } = await supabase.from('pagos').select('*, prestamos(*, clientes(*))').eq('user_id', activeUserId).order('fecha_pago', { ascending: false });
 
     if (dataClientes) setClientes(dataClientes);
     if (dataPrestamos) setPrestamos(dataPrestamos);
@@ -208,6 +256,7 @@ export default function Home() {
 
     const { error } = await supabase.from('clientes').insert([{
       ...nuevoCliente,
+      user_id: session?.user?.id,
       telefono: formatearTelefono(nuevoCliente.telefono)
     }]);
 
@@ -253,6 +302,7 @@ export default function Home() {
 
         if (nombre && cedula && telefono) {
           await supabase.from('clientes').insert([{
+            user_id: session?.user?.id,
             nombre_completo: nombre,
             cedula: cedula,
             telefono: formatearTelefono(telefono),
@@ -282,6 +332,7 @@ export default function Home() {
     const fechaISO = `${nuevoPrestamo.anio}-${mesPadded}-${diaPadded}`;
 
     const { error } = await supabase.from('prestamos').insert([{
+      user_id: session?.user?.id,
       cliente_id: nuevoPrestamo.cliente_id,
       monto_original: monto,
       capital_pendiente: monto,
@@ -329,6 +380,7 @@ export default function Home() {
     const aplicadoCapital = Math.max(0, montoAbonado - aplicadoInteres);
 
     const payloadPago: any = {
+      user_id: session?.user?.id,
       prestamo_id: prestamo.id,
       monto_total: montoAbonado,
       aplicado_interes: aplicadoInteres,
@@ -369,7 +421,8 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
+  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   if (authLoading) {
     return (
@@ -384,46 +437,122 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-4">
         <style jsx global>{`
-          input {
+          input, select, textarea {
             color: #000000 !important;
             background-color: #ffffff !important;
             -webkit-text-fill-color: #000000 !important;
             opacity: 1 !important;
           }
+          input::placeholder {
+            color: #6b7280 !important;
+            -webkit-text-fill-color: #6b7280 !important;
+          }
         `}</style>
         
         <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
+          
+          {/* HEADER DEL PORTAL DE ENTRADA CON LOGO VECTORIAL HANDSHAKE */}
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 mx-auto flex items-center justify-center text-white font-extrabold text-xl shadow-lg">
-              P
+            <div className="w-14 h-14 mx-auto bg-gray-950 rounded-2xl border border-gray-800 p-2.5 flex items-center justify-center shadow-lg">
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                <path d="M 15 85 V 15 C 15 10, 20 5, 28 5 H 38 C 46 5, 52 10, 52 15 V 35 L 70 20 C 76 15, 85 17, 89 23 C 93 29, 91 38, 85 42 L 52 65 V 85 C 52 90, 46 95, 38 95 H 28 C 20 95, 15 90, 15 85 Z" fill="#1D4ED8"/>
+                <path d="M 45 10 C 72 10, 95 24, 95 50 C 95 72, 75 88, 52 88 L 38 88 L 52 74 C 68 74, 78 63, 78 50 C 78 36, 64 26, 45 26 H 36 V 10 Z" fill="#38BDF8"/>
+              </svg>
             </div>
             <h1 className="text-xl font-extrabold text-white tracking-wide">Presta'o</h1>
             <p className="text-xs text-gray-400">Gestión Inteligente de Créditos</p>
           </div>
 
-          <form onSubmit={handleAuth} className="space-y-4 text-xs">
+          <form onSubmit={handleAuth} className="space-y-4 text-xs" autoComplete="off">
+            
+            {/* CAMPOS ADICIONALES SOLO EN MODO REGISTRO */}
+            {isRegistering && (
+              <>
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Nombre Completo *</label>
+                  <input 
+                    type="text" 
+                    value={regNombre} 
+                    onChange={e => setRegNombre(e.target.value)}
+                    className={fieldInputStyle}
+                    placeholder="Ej: Juan Pérez"
+                    required={isRegistering}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Nombre Financiera / Empresa *</label>
+                  <input 
+                    type="text" 
+                    value={regEmpresa} 
+                    onChange={e => setRegEmpresa(e.target.value)}
+                    className={fieldInputStyle}
+                    placeholder="Ej: Inversiones Pérez"
+                    required={isRegistering}
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-gray-300 mb-1">Teléfono Móvil</label>
+                  <input 
+                    type="text" 
+                    value={regTelefono} 
+                    onChange={e => setRegTelefono(e.target.value)}
+                    className={fieldInputStyle}
+                    placeholder="Ej: 6666-6666"
+                  />
+                </div>
+              </>
+            )}
+
             <div>
-              <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico</label>
+              <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico *</label>
               <input 
                 type="email" 
                 value={authEmail} 
                 onChange={e => setAuthEmail(e.target.value)}
                 className={fieldInputStyle}
                 placeholder="usuario@ejemplo.com"
+                autoComplete="new-email"
                 required
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-gray-300 mb-1">Contraseña</label>
-              <input 
-                type="password" 
-                value={authPassword} 
-                onChange={e => setAuthPassword(e.target.value)}
-                className={fieldInputStyle}
-                placeholder="••••••••"
-                required
-              />
+              <div className="flex justify-between items-center mb-1">
+                <label className="block font-semibold text-gray-300">Contraseña *</label>
+                <span className="text-[10px] text-gray-400">Mínimo 8 caracteres</span>
+              </div>
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={authPassword} 
+                  onChange={e => setAuthPassword(e.target.value)}
+                  className={fieldInputStyle}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-black font-bold text-xs"
+                >
+                  {showPassword ? "🙈 Ocultar" : "👁️ Ver"}
+                </button>
+              </div>
+
+              {/* MEDIDOR DE FUERZA DE CONTRASEÑA */}
+              {authPassword.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex gap-1 h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
+                    <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 1 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
+                    <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 2 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
+                    <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 3 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-right">
+                    Seguridad: <span className="font-bold text-gray-200">{fuerzaPass.label}</span>
+                  </p>
+                </div>
+              )}
             </div>
 
             <button 
@@ -437,7 +566,11 @@ export default function Home() {
 
           <div className="text-center pt-2 border-t border-gray-800">
             <button 
-              onClick={() => setIsRegistering(!isRegistering)}
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setAuthEmail('');
+                setAuthPassword('');
+              }}
               className="text-xs text-blue-400 hover:underline font-semibold"
             >
               {isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate aquí'}
@@ -498,30 +631,39 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* NAVEGACIÓN SUPERIOR CON LOGOUT */}
+        {/* NAVEGACIÓN SUPERIOR CON BOTONES NATIVOS RESPONSIVOS (SIN SCROLLBAR INCORPORADO) */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
+          
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md">
-                P
+              <div className="w-9 h-9 rounded-xl bg-gray-950 border border-gray-800 p-1.5 flex items-center justify-center shadow-md">
+                <svg viewBox="0 0 100 100" className="w-full h-full">
+                  <path d="M 15 85 V 15 C 15 10, 20 5, 28 5 H 38 C 46 5, 52 10, 52 15 V 35 L 70 20 C 76 15, 85 17, 89 23 C 93 29, 91 38, 85 42 L 52 65 V 85 C 52 90, 46 95, 38 95 H 28 C 20 95, 15 90, 15 85 Z" fill="#1D4ED8"/>
+                  <path d="M 45 10 C 72 10, 95 24, 95 50 C 95 72, 75 88, 52 88 L 38 88 L 52 74 C 68 74, 78 63, 78 50 C 78 36, 64 26, 45 26 H 36 V 10 Z" fill="#38BDF8"/>
+                </svg>
               </div>
-              <h1 className="text-lg font-extrabold text-white tracking-wide">Presta'o</h1>
+              <div>
+                <h1 className="text-lg font-extrabold text-white tracking-wide leading-none">Presta'o</h1>
+                <p className="text-[10px] text-gray-400 mt-0.5">{session?.user?.user_metadata?.empresa || 'Gestión de Créditos'}</p>
+              </div>
             </div>
+            
             <button 
               onClick={handleSignOut}
-              className="sm:hidden text-xs bg-red-950/50 text-red-400 border border-red-800/50 px-2.5 py-1 rounded-lg font-bold"
+              className="sm:hidden text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-2.5 py-1.5 rounded-lg font-bold transition"
             >
               Salir
             </button>
           </div>
 
-          <nav className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-semibold w-full sm:w-auto justify-center overflow-x-auto">
+          {/* GRID RESPONSIVO INDEPENDIENTE PARA NAVEGACIÓN SIN "IFRAME" O SCROLL LATERAL */}
+          <nav className="grid grid-cols-5 bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-semibold w-full sm:w-auto">
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => cambiarPestana(tab)}
-                className={`px-3.5 py-2 rounded-lg capitalize transition whitespace-nowrap ${
-                  activeTab === tab ? 'bg-blue-600 text-white font-bold shadow-sm' : 'text-gray-400 hover:text-white'
+                className={`py-2 px-1 text-center rounded-lg capitalize transition font-bold text-[11px] sm:text-xs ${
+                  activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 {tab === 'pagos' ? 'Cobros' : tab === 'csv' ? 'CSV' : tab}
@@ -590,7 +732,7 @@ export default function Home() {
                     </div>
                   );
                 })}
-                {prestamos.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">No hay préstamos activos registrados.</p>}
+                {prestamos.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">No hay préstamos activos registrados en tu cartera.</p>}
               </div>
             </div>
           )}
@@ -673,6 +815,7 @@ export default function Home() {
                       </div>
                     );
                   })}
+                  {clientes.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">Aún no has agregado ningún cliente.</p>}
                 </div>
               </div>
             </div>
@@ -871,6 +1014,7 @@ export default function Home() {
                       </div>
                     </div>
                   ))}
+                  {pagos.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">Aún no hay cobros registrados.</p>}
                 </div>
               </div>
             </div>
