@@ -294,7 +294,7 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // CAJA BLANCA CON TEXTO NEGRO PURO (100% VISIBLE)
+  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO PURO
   const fieldInputStyle = "w-full !bg-white !text-black border border-gray-300 rounded-xl p-3.5 font-bold text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   return (
