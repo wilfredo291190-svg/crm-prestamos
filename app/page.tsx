@@ -8,6 +8,14 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
+  // Estado de Sesión
+  const [session, setSession] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Estados de CRM
   const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv'>('dashboard');
   const [loading, setLoading] = useState(true);
 
@@ -17,10 +25,8 @@ export default function Home() {
   const [quincenas, setQuincenas] = useState<any[]>([]);
   const [pagos, setPagos] = useState<any[]>([]);
 
-  // Formularios
+  // Formularios CRM
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
-  
-  // Préstamo Form con Fecha Latina (DD/MM/AAAA)
   const [nuevoPrestamo, setNuevoPrestamo] = useState({ 
     cliente_id: '', 
     monto_original: '', 
@@ -30,8 +36,6 @@ export default function Home() {
     mes: '', 
     anio: new Date().getFullYear().toString() 
   });
-
-  // Pago Form con Fecha Latina (DD/MM/AAAA)
   const [nuevoPago, setNuevoPago] = useState({ 
     prestamo_id: '', 
     monto_total: '', 
@@ -40,7 +44,6 @@ export default function Home() {
     mes: '', 
     anio: new Date().getFullYear().toString() 
   });
-
   const [csvTexto, setCsvTexto] = useState('');
 
   // --- SISTEMA DE MODALES Y ALERTAS NATIVAS PWA (DARK MODE) ---
@@ -69,9 +72,50 @@ export default function Home() {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
   }
 
+  // VALIDAR SESIÓN DE SUPABASE
   useEffect(() => {
-    cargarDatos();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+      if (session) cargarDatos();
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) cargarDatos();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  async function handleAuth(e: React.FormEvent) {
+    e.preventDefault();
+    if (!authEmail || !authPassword) {
+      return mostrarAlerta('Campos Requeridos', 'Por favor ingresa tu correo y contraseña.', 'alerta');
+    }
+
+    if (isRegistering) {
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) mostrarAlerta('Error de Registro', error.message, 'error');
+      else mostrarAlerta('Registro Exitoso', 'Cuenta creada. Revisa tu correo para confirmar la cuenta o inicia sesión.', 'exito');
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) mostrarAlerta('Error de Acceso', 'Credenciales incorrectas: ' + error.message, 'error');
+    }
+  }
+
+  async function handleSignOut() {
+    mostrarConfirmacion('Cerrar Sesión', '¿Estás seguro de que deseas salir del sistema?', async () => {
+      await supabase.auth.signOut();
+      setSession(null);
+    });
+  }
 
   function cambiarPestana(tab: 'dashboard' | 'clientes' | 'prestamos' | 'pagos' | 'csv') {
     setActiveTab(tab);
@@ -294,12 +338,85 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // CLASES OBLIGATORIAS DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
+  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
   const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p className="text-sm font-semibold text-gray-400 animate-pulse">Cargando Presta'o...</p>
+      </div>
+    );
+  }
+
+  // --- VISTA 1: LOGIN / REGISTRO ---
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-4">
+        <style jsx global>{`
+          input {
+            color: #000000 !important;
+            background-color: #ffffff !important;
+            -webkit-text-fill-color: #000000 !important;
+            opacity: 1 !important;
+          }
+        `}</style>
+        
+        <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 mx-auto flex items-center justify-center text-white font-extrabold text-xl shadow-lg">
+              P
+            </div>
+            <h1 className="text-xl font-extrabold text-white tracking-wide">Presta'o</h1>
+            <p className="text-xs text-gray-400">Gestión Inteligente de Créditos</p>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico</label>
+              <input 
+                type="email" 
+                value={authEmail} 
+                onChange={e => setAuthEmail(e.target.value)}
+                className={fieldInputStyle}
+                placeholder="usuario@ejemplo.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-gray-300 mb-1">Contraseña</label>
+              <input 
+                type="password" 
+                value={authPassword} 
+                onChange={e => setAuthPassword(e.target.value)}
+                className={fieldInputStyle}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-sm mt-2">
+              {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
+            </button>
+          </form>
+
+          <div className="text-center pt-2 border-t border-gray-800">
+            <button 
+              onClick={() => setIsRegistering(!isRegistering)}
+              className="text-xs text-blue-400 hover:underline font-semibold"
+            >
+              {isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate aquí'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- VISTA 2: CRM DASHBOARD COMPLETO (SOLO USUARIOS LOGUEADOS) ---
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans py-6 px-4">
-      {/* INYECCIÓN CSS PARA FORZAR NEGRO PURO EN TEXTO ESCRITO, SELECCIÓN Y PLACEHOLDERS */}
       <style jsx global>{`
         input, select, textarea {
           color: #000000 !important;
@@ -319,13 +436,21 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* NAVEGACIÓN SUPERIOR */}
+        {/* NAVEGACIÓN SUPERIOR CON LOGOUT */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md">
-              P
+          <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md">
+                P
+              </div>
+              <h1 className="text-lg font-extrabold text-white tracking-wide">Presta'o</h1>
             </div>
-            <h1 className="text-lg font-extrabold text-white tracking-wide">Presta'o</h1>
+            <button 
+              onClick={handleSignOut}
+              className="sm:hidden text-xs bg-red-950/50 text-red-400 border border-red-800/50 px-2.5 py-1 rounded-lg font-bold"
+            >
+              Salir
+            </button>
           </div>
 
           <nav className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1 text-xs font-semibold w-full sm:w-auto justify-center overflow-x-auto">
@@ -341,6 +466,13 @@ export default function Home() {
               </button>
             ))}
           </nav>
+
+          <button 
+            onClick={handleSignOut}
+            className="hidden sm:block text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-3 py-2 rounded-xl font-bold transition"
+          >
+            Salir
+          </button>
         </header>
 
         {/* METRICAS PRINCIPALES */}
