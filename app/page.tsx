@@ -11,6 +11,7 @@ export default function Home() {
   // Estado de Sesión
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -94,19 +95,49 @@ export default function Home() {
       return mostrarAlerta('Campos Requeridos', 'Por favor ingresa tu correo y contraseña.', 'alerta');
     }
 
-    if (isRegistering) {
-      const { error } = await supabase.auth.signUp({
-        email: authEmail,
-        password: authPassword,
-      });
-      if (error) mostrarAlerta('Error de Registro', error.message, 'error');
-      else mostrarAlerta('Registro Exitoso', 'Cuenta creada. Revisa tu correo para confirmar la cuenta o inicia sesión.', 'exito');
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: authPassword,
-      });
-      if (error) mostrarAlerta('Error de Acceso', 'Credenciales incorrectas: ' + error.message, 'error');
+    setIsSubmitting(true);
+
+    try {
+      if (isRegistering) {
+        const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://crm-prestamos-507.vercel.app';
+        
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+          options: {
+            emailRedirectTo: redirectUrl,
+          }
+        });
+        
+        setIsSubmitting(false);
+
+        if (error) {
+          mostrarAlerta('Error de Registro', error.message, 'error');
+        } else if (data?.user && data?.session) {
+          mostrarAlerta('Cuenta Creada', 'Bienvenido a Presta\'o. Tu sesión ha sido iniciada.', 'exito');
+        } else {
+          mostrarAlerta(
+            'Verificación Enviada', 
+            `Hemos enviado un enlace de confirmación a ${authEmail}. Por favor revisa tu bandeja de entrada o spam para activar tu cuenta e iniciar sesión.`, 
+            'exito'
+          );
+          setIsRegistering(false);
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+
+        setIsSubmitting(false);
+
+        if (error) {
+          mostrarAlerta('Error de Acceso', 'Credenciales incorrectas o correo no verificado: ' + error.message, 'error');
+        }
+      }
+    } catch (err: any) {
+      setIsSubmitting(false);
+      mostrarAlerta('Error', err.message || 'Ocurrió un error inesperado', 'error');
     }
   }
 
@@ -338,7 +369,6 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // ESTILO DE INPUT: FONDO BLANCO PURO Y TEXTO NEGRO NEGRO (#000000)
   const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   if (authLoading) {
@@ -396,8 +426,12 @@ export default function Home() {
               />
             </div>
 
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-sm mt-2">
-              {isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-sm mt-2"
+            >
+              {isSubmitting ? 'Procesando...' : isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
             </button>
           </form>
 
@@ -410,6 +444,34 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* MODAL PWA (DARK MODE) */}
+        {modalConfig.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+              
+              <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
+                {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
+                {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
+                {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">✕</span>}
+                {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-full flex items-center justify-center">ℹ</span>}
+              </div>
+
+              <div>
+                <h3 className="text-base font-bold text-white">{modalConfig.titulo}</h3>
+                <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
+              </div>
+
+              <button
+                onClick={cerrarModal}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md font-bold text-xs"
+              >
+                Entendido
+              </button>
+
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -842,7 +904,7 @@ export default function Home() {
 
       </div>
 
-      {/* --- MODAL PWA (DARK MODE) --- */}
+      {/* MODAL PWA (DARK MODE) */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
@@ -881,7 +943,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={cerrarModal}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl transition shadow-md font-bold text-xs"
                 >
                   Entendido
                 </button>
