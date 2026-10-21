@@ -23,7 +23,7 @@ export default function Home() {
   const [nuevoPago, setNuevoPago] = useState({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: '' });
   const [csvTexto, setCsvTexto] = useState('');
 
-  // --- SISTEMA DE MODALES Y ALERTAS CUSTOM (PWA DARK MODE) ---
+  // --- SISTEMA DE MODALES Y ALERTAS NATIVAS PWA (DARK MODE) ---
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     tipo: 'alerta' | 'confirmacion' | 'exito' | 'error';
@@ -637,10 +637,9 @@ export default function Home() {
 
       {/* --- COMPONENTE MODAL/POPUP CUSTOM PWA (DARK MODE) --- */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center transform transition-all scale-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
             
-            {/* Ícono dinámico del Modal */}
             <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
               {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
               {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
@@ -653,7 +652,6 @@ export default function Home() {
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
             </div>
 
-            {/* Acciones */}
             <div className="flex gap-2 pt-2 text-xs font-semibold">
               {modalConfig.tipo === 'confirmacion' ? (
                 <>
