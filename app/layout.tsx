@@ -2,15 +2,18 @@ import React from 'react';
 import './globals.css';
 import { Montserrat } from 'next/font/google';
 
-const montserrat = Montserrat({ 
+const montserrat = Montserrat({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700', '800'],
   variable: '--font-montserrat',
 });
 
 export const metadata = {
-  title: 'CRM Préstamos',
-  description: 'Sistema de gestión de préstamos personales',
+  title: "Presta'o - CRM de Préstamos",
+  description: 'Sistema de gestión de préstamos personales sobre saldo insoluto',
+  verification: {
+    google: 'VGCvnxWNhrZuqkzmtywxIM0uI1KxVbSqB-Yvg7swx4U',
+  },
 };
 
 export default function RootLayout({
@@ -20,7 +23,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={montserrat.variable}>
-      <body className="antialiased bg-slate-950 text-slate-100 font-sans">
+      <head>
+        <meta name="google-site-verification" content="VGCvnxWNhrZuqkzmtywxIM0uI1KxVbSqB-Yvg7swx4U" />
+      </head>
+      <body className={`${montserrat.className} bg-gray-950 text-gray-100 antialiased`}>
         {children}
       </body>
     </html>
