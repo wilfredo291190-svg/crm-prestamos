@@ -295,6 +295,23 @@ export default function Home() {
     );
   }
 
+  // DESCARGAR PLANTILLA CSV DE EJEMPLO
+  function descargarPlantillaCSV() {
+    const plantilla = "Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha\n" +
+      "Juan Perez,8-888-8888,6666-6666,Panama,500.00,10,2026-01-15,50.00,2026-01-30\n" +
+      "Maria Gomez,3-333-3333,6555-5555,Colon,1000.00,5,2026-02-01,,";
+
+    const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'plantilla_prestao_clientes.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // CARGA MASIVA AVANZADA CON CARTERA HISTÓRICA
   async function handleCargarCSV(e: React.FormEvent) {
     e.preventDefault();
     if (!csvTexto.trim()) return mostrarAlerta('Archivo Vacío', 'Pega el texto del CSV para continuar.', 'alerta');
@@ -302,22 +319,68 @@ export default function Home() {
     const filas = csvTexto.trim().split('\n');
     let creados = 0;
 
-    for (const fila of filas) {
-      const columnas = fila.split(',');
-      if (columnas.length >= 3) {
-        const nombre = columnas[0]?.trim();
-        const cedula = columnas[1]?.trim();
-        const telefono = columnas[2]?.trim();
-        const direccion = columnas[3]?.trim() || 'Panamá';
+    for (let i = 0; i < filas.length; i++) {
+      const fila = filas[i].trim();
+      if (!fila || fila.toLowerCase().startsWith('nombre')) continue; // Ignorar encabezado
+
+      const col = fila.split(',');
+      if (col.length >= 3) {
+        const nombre = col[0]?.trim();
+        const cedula = col[1]?.trim();
+        const telefono = col[2]?.trim();
+        const direccion = col[3]?.trim() || 'Panamá';
+        const montoPrestamo = col[4]?.trim() ? parseFloat(col[4].trim()) : 0;
+        const tasaQuincenal = col[5]?.trim() ? parseFloat(col[5].trim()) : 10;
+        const fechaInicio = col[6]?.trim() || new Date().toISOString().split('T')[0];
+        const pagoMonto = col[7]?.trim() ? parseFloat(col[7].trim()) : 0;
+        const pagoFecha = col[8]?.trim() || new Date().toISOString().split('T')[0];
 
         if (nombre && cedula && telefono) {
-          await supabase.from('clientes').insert([{
+          // 1. Crear Cliente
+          const { data: dataCliente } = await supabase.from('clientes').insert([{
             user_id: session?.user?.id,
             nombre_completo: nombre,
             cedula: cedula,
             telefono: formatearTelefono(telefono),
             direccion: direccion
-          }]);
+          }]).select().single();
+
+          if (dataCliente && montoPrestamo > 0) {
+            // 2. Crear Préstamo asociado
+            const { data: dataPrestamo } = await supabase.from('prestamos').insert([{
+              user_id: session?.user?.id,
+              cliente_id: dataCliente.id,
+              monto_original: montoPrestamo,
+              capital_pendiente: montoPrestamo,
+              tasa_quincenal: tasaQuincenal,
+              esquema_cobro: '15_30',
+              fecha_inicio: fechaInicio,
+              estado: 'activo'
+            }]).select().single();
+
+            // 3. Registrar Pago Histórico si aplica
+            if (dataPrestamo && pagoMonto > 0) {
+              const interesQuincenal = (montoPrestamo * tasaQuincenal) / 100;
+              const aplicadoInteres = Math.min(pagoMonto, interesQuincenal);
+              const aplicadoCapital = Math.max(0, pagoMonto - aplicadoInteres);
+
+              await supabase.from('pagos').insert([{
+                user_id: session?.user?.id,
+                prestamo_id: dataPrestamo.id,
+                monto_total: pagoMonto,
+                aplicado_interes: aplicadoInteres,
+                aplicado_capital: aplicadoCapital,
+                fecha_pago: pagoFecha,
+                notas: 'Carga Masiva Inicial'
+              }]);
+
+              const nuevoCapital = Math.max(0, montoPrestamo - aplicadoCapital);
+              await supabase.from('prestamos').update({
+                capital_pendiente: nuevoCapital,
+                estado: nuevoCapital === 0 ? 'cancelado' : 'activo'
+              }).eq('id', dataPrestamo.id);
+            }
+          }
           creados++;
         }
       }
@@ -325,7 +388,7 @@ export default function Home() {
 
     setCsvTexto('');
     cargarDatos();
-    mostrarAlerta('Carga Completada', `Se importaron ${creados} clientes exitosamente.`, 'exito');
+    mostrarAlerta('Carga Completada', `Se importaron ${creados} registros de clientes e historial exitosamente.`, 'exito');
   }
 
   async function handleCrearPrestamo(e: React.FormEvent) {
@@ -359,6 +422,27 @@ export default function Home() {
       cargarDatos();
       mostrarAlerta('Préstamo Generado', 'El crédito quedó registrado exitosamente.', 'exito');
     }
+  }
+
+  // ENVIAR COMPROBANTE DE PAGO POR WHATSAPP
+  function enviarComprobanteWhatsApp(pago: any) {
+    const clienteNombre = pago.prestamos?.clientes?.nombre_completo || 'Cliente';
+    const telefonoRaw = pago.prestamos?.clientes?.telefono || '';
+    const numLimpio = '507' + telefonoRaw.replace(/\D/g, '');
+
+    const mensaje = `*RECIBO DE PAGO - PRESTA'O*\n\n` +
+      `👤 *Cliente:* ${clienteNombre}\n` +
+      `💵 *Monto Abonado:* $${Number(pago.monto_total).toFixed(2)}\n` +
+      `📅 *Fecha:* ${new Date(pago.fecha_pago).toLocaleDateString('es-PA')}\n` +
+      `💳 *Método:* ${pago.notas}\n\n` +
+      `Desglose del Abono:\n` +
+      `• A Interés: $${Number(pago.aplicado_interes).toFixed(2)}\n` +
+      `• A Capital: $${Number(pago.aplicado_capital).toFixed(2)}\n\n` +
+      `*Saldo Restante:* $${Number(pago.prestamos?.capital_pendiente || 0).toFixed(2)}\n\n` +
+      `¡Gracias por tu pago puntual!`;
+
+    const url = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
   }
 
   async function handleRegistrarPago(e: React.FormEvent) {
@@ -399,7 +483,7 @@ export default function Home() {
       notas: `Método: ${nuevoPago.metodo_pago}`
     };
 
-    const { error: errPago } = await supabase.from('pagos').insert([payloadPago]);
+    const { data: dataPago, error: errPago } = await supabase.from('pagos').insert([payloadPago]).select('*, prestamos(*, clientes(*))').single();
 
     if (errPago) return mostrarAlerta('Error de Pago', errPago.message, 'error');
 
@@ -413,10 +497,13 @@ export default function Home() {
 
     setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', dia: '', mes: '', anio: new Date().getFullYear().toString() });
     cargarDatos();
-    mostrarAlerta(
-      'Cobro Procesado', 
-      `Abonado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. Nuevo saldo restante: $${nuevoCapitalPendiente.toFixed(2)}`,
-      'exito'
+
+    mostrarConfirmacion(
+      'Cobro Exitoso - ¿Enviar Comprobante?',
+      `Abonado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. ¿Deseas enviar el recibo por WhatsApp al cliente?`,
+      () => {
+        if (dataPago) enviarComprobanteWhatsApp(dataPago);
+      }
     );
   }
 
@@ -431,10 +518,8 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  // ESTÁNDAR GLOBAL DE INPUTS (HOMOGÉNEO ROUNDED-2XL)
   const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
-  // NOMBRES DE PESTAÑAS
   const tabNames: Record<string, string> = {
     dashboard: 'Dashboard',
     clientes: 'Clientes',
@@ -644,7 +729,7 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* HEADER HOMOGÉNEO (BORDER RADIUS ROUNDED-2XL PARA TODOS) */}
+        {/* HEADER HOMOGÉNEO */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
@@ -668,7 +753,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* BARRA DE NAVEGACIÓN SIMÉTRICA HOMOGÉNEA */}
           <nav className="w-full sm:w-auto flex flex-wrap sm:flex-nowrap bg-gray-950 p-1.5 rounded-2xl border border-gray-800 gap-1.5 justify-center">
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
@@ -693,7 +777,7 @@ export default function Home() {
           </button>
         </header>
 
-        {/* TARJETA DE MÉTRICAS SIMÉTRICA Y HOMOGÉNEA (MOBILE FRIENDLY) */}
+        {/* MÉTRICAS SIMÉTRICAS */}
         <div className="bg-gray-900 border border-gray-800 text-white rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1018,11 +1102,20 @@ export default function Home() {
                         <p className="font-bold text-white text-sm">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
                         <p className="text-gray-400 mt-0.5">{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-emerald-400 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-600 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-bold text-emerald-400 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-600 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => enviarComprobanteWhatsApp(p)}
+                          className="bg-emerald-950/80 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/80 p-2 rounded-2xl font-bold text-xs transition"
+                          title="Enviar Recibo por WhatsApp"
+                        >
+                          📲 WhatsApp
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1034,24 +1127,34 @@ export default function Home() {
 
           {!loading && activeTab === 'csv' && (
             <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
-              <h2 className="text-base font-bold text-white">Importación Masiva de Clientes (CSV)</h2>
-              <p className="text-xs text-gray-400">
-                Pega la lista desde Excel en formato separado por comas:
+              <div className="flex justify-between items-center">
+                <h2 className="text-base font-bold text-white">Importación Masiva de Clientes e Historial</h2>
+                <button
+                  onClick={descargarPlantillaCSV}
+                  className="bg-gray-800 hover:bg-gray-700 text-blue-400 border border-gray-700 px-3 py-1.5 rounded-2xl font-bold text-xs transition"
+                >
+                  📥 Descargar Plantilla .CSV
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Pega tus datos separados por comas. Puedes cargar únicamente los clientes o incluir opcionalmente sus préstamos e historial de abonos:
                 <br />
-                <code className="bg-gray-950 px-2 py-1 rounded text-[10px] text-gray-300 font-mono mt-1 block">
-                  Nombre Completo, Cedula, Telefono, Direccion
+                <code className="bg-gray-950 px-2.5 py-1.5 rounded-xl text-[10px] text-gray-300 font-mono mt-1.5 block overflow-x-auto">
+                  Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha
                 </code>
               </p>
+
               <form onSubmit={handleCargarCSV} className="space-y-3 text-xs">
                 <textarea
                   rows={6}
                   value={csvTexto}
                   onChange={e => setCsvTexto(e.target.value)}
-                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon"
+                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon, 1000.00, 5, 2026-02-01, ,"
                   className={fieldInputStyle}
                 />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
-                  Cargar Lista de Clientes
+                  Cargar Datos Masivos
                 </button>
               </form>
             </div>
@@ -1091,7 +1194,7 @@ export default function Home() {
                       cerrarModal();
                       if (modalConfig.onAceptar) modalConfig.onAceptar();
                     }}
-                    className="w-1/2 bg-red-600 hover:bg-red-500 text-white py-3 rounded-2xl transition shadow-md"
+                    className="w-1/2 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-2xl transition shadow-md"
                   >
                     Confirmar
                   </button>
