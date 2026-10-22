@@ -13,7 +13,7 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Campos del Formulario de Auth (Permite Usuario o Email)
+  // Campos del Formulario de Auth
   const [authIdentifier, setAuthIdentifier] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -295,33 +295,36 @@ export default function Home() {
     );
   }
 
-  // DESCARGAR PLANTILLA CSV DE EJEMPLO
+  // DESCARGAR PLANTILLA EXCEL/CSV DE EJEMPLO
   function descargarPlantillaCSV() {
     const plantilla = "Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha\n" +
       "Juan Perez,8-888-8888,6666-6666,Panama,500.00,10,2026-01-15,50.00,2026-01-30\n" +
+      "Juan Perez,8-888-8888,6666-6666,Panama,,,2026-02-15,50.00,2026-02-15\n" +
       "Maria Gomez,3-333-3333,6555-5555,Colon,1000.00,5,2026-02-01,,";
 
     const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'plantilla_prestao_clientes.csv');
+    link.setAttribute('download', 'plantilla_prestao_cartera.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   }
 
-  // CARGA MASIVA AVANZADA CON CARTERA HISTÓRICA
+  // CARGA MASIVA AVANZADA DE CARTERA (IDENTIFICACIÓN POR CÉDULA Y MÚLTIPLES PAGOS)
   async function handleCargarCSV(e: React.FormEvent) {
     e.preventDefault();
-    if (!csvTexto.trim()) return mostrarAlerta('Archivo Vacío', 'Pega el texto del CSV para continuar.', 'alerta');
+    if (!csvTexto.trim()) return mostrarAlerta('Archivo Vacío', 'Pega las filas de tu Excel o CSV para continuar.', 'alerta');
 
     const filas = csvTexto.trim().split('\n');
-    let creados = 0;
+    let clientesProcesados = 0;
+    let prestamosProcesados = 0;
+    let pagosProcesados = 0;
 
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i].trim();
-      if (!fila || fila.toLowerCase().startsWith('nombre')) continue; // Ignorar encabezado
+      if (!fila || fila.toLowerCase().startsWith('nombre')) continue; // Omitir encabezados
 
       const col = fila.split(',');
       if (col.length >= 3) {
@@ -335,60 +338,105 @@ export default function Home() {
         const pagoMonto = col[7]?.trim() ? parseFloat(col[7].trim()) : 0;
         const pagoFecha = col[8]?.trim() || new Date().toISOString().split('T')[0];
 
-        if (nombre && cedula && telefono) {
-          // 1. Crear Cliente
-          const { data: dataCliente } = await supabase.from('clientes').insert([{
-            user_id: session?.user?.id,
-            nombre_completo: nombre,
-            cedula: cedula,
-            telefono: formatearTelefono(telefono),
-            direccion: direccion
-          }]).select().single();
+        if (cedula) {
+          // 1. Buscar o Crear Cliente por Cédula
+          let clienteId = null;
+          const { data: clienteExiste } = await supabase
+            .from('clientes')
+            .select('id')
+            .eq('user_id', session?.user?.id)
+            .eq('cedula', cedula)
+            .single();
 
-          if (dataCliente && montoPrestamo > 0) {
-            // 2. Crear Préstamo asociado
-            const { data: dataPrestamo } = await supabase.from('prestamos').insert([{
+          if (clienteExiste) {
+            clienteId = clienteExiste.id;
+          } else if (nombre && telefono) {
+            const { data: clienteNuevo } = await supabase.from('clientes').insert([{
               user_id: session?.user?.id,
-              cliente_id: dataCliente.id,
-              monto_original: montoPrestamo,
-              capital_pendiente: montoPrestamo,
-              tasa_quincenal: tasaQuincenal,
-              esquema_cobro: '15_30',
-              fecha_inicio: fechaInicio,
-              estado: 'activo'
+              nombre_completo: nombre,
+              cedula: cedula,
+              telefono: formatearTelefono(telefono),
+              direccion: direccion
             }]).select().single();
 
+            if (clienteNuevo) {
+              clienteId = clienteNuevo.id;
+              clientesProcesados++;
+            }
+          }
+
+          if (clienteId) {
+            // 2. Buscar o Crear Préstamo Activo del Cliente
+            let prestamoId = null;
+            let capitalActual = 0;
+
+            if (montoPrestamo > 0) {
+              const { data: prestamoNuevo } = await supabase.from('prestamos').insert([{
+                user_id: session?.user?.id,
+                cliente_id: clienteId,
+                monto_original: montoPrestamo,
+                capital_pendiente: montoPrestamo,
+                tasa_quincenal: tasaQuincenal,
+                esquema_cobro: '15_30',
+                fecha_inicio: fechaInicio,
+                estado: 'activo'
+              }]).select().single();
+
+              if (prestamoNuevo) {
+                prestamoId = prestamoNuevo.id;
+                capitalActual = montoPrestamo;
+                prestamosProcesados++;
+              }
+            } else {
+              // Buscar el último préstamo activo de este cliente
+              const { data: prestamoExistente } = await supabase
+                .from('prestamos')
+                .select('*')
+                .eq('user_id', session?.user?.id)
+                .eq('cliente_id', clienteId)
+                .eq('estado', 'activo')
+                .order('creado_en', { ascending: false })
+                .limit(1)
+                .single();
+
+              if (prestamoExistente) {
+                prestamoId = prestamoExistente.id;
+                capitalActual = Number(prestamoExistente.capital_pendiente);
+              }
+            }
+
             // 3. Registrar Pago Histórico si aplica
-            if (dataPrestamo && pagoMonto > 0) {
-              const interesQuincenal = (montoPrestamo * tasaQuincenal) / 100;
+            if (prestamoId && pagoMonto > 0) {
+              const interesQuincenal = (capitalActual * tasaQuincenal) / 100;
               const aplicadoInteres = Math.min(pagoMonto, interesQuincenal);
               const aplicadoCapital = Math.max(0, pagoMonto - aplicadoInteres);
 
               await supabase.from('pagos').insert([{
                 user_id: session?.user?.id,
-                prestamo_id: dataPrestamo.id,
+                prestamo_id: prestamoId,
                 monto_total: pagoMonto,
                 aplicado_interes: aplicadoInteres,
                 aplicado_capital: aplicadoCapital,
                 fecha_pago: pagoFecha,
-                notas: 'Carga Masiva Inicial'
+                notas: 'Importación de Cartera'
               }]);
 
-              const nuevoCapital = Math.max(0, montoPrestamo - aplicadoCapital);
+              const nuevoCapital = Math.max(0, capitalActual - aplicadoCapital);
               await supabase.from('prestamos').update({
                 capital_pendiente: nuevoCapital,
                 estado: nuevoCapital === 0 ? 'cancelado' : 'activo'
-              }).eq('id', dataPrestamo.id);
+              }).eq('id', prestamoId);
+
+              pagosProcesados++;
             }
           }
-          creados++;
         }
       }
     }
 
     setCsvTexto('');
     cargarDatos();
-    mostrarAlerta('Carga Completada', `Se importaron ${creados} registros de clientes e historial exitosamente.`, 'exito');
+    mostrarAlerta('Carga Exitosa', `Se procesaron: ${clientesProcesados} nuevos clientes, ${prestamosProcesados} préstamos y ${pagosProcesados} abonos históricos.`, 'exito');
   }
 
   async function handleCrearPrestamo(e: React.FormEvent) {
@@ -525,7 +573,7 @@ export default function Home() {
     clientes: 'Clientes',
     prestamos: 'Préstamos',
     pagos: 'Cobros',
-    csv: 'CSV'
+    csv: 'Cargar Cartera'
   };
 
   if (authLoading) {
@@ -729,7 +777,7 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* HEADER HOMOGÉNEO */}
+        {/* ENCABEZADO Y NAVEGACIÓN */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
@@ -777,7 +825,7 @@ export default function Home() {
           </button>
         </header>
 
-        {/* MÉTRICAS SIMÉTRICAS */}
+        {/* TARJETA DE MÉTRICAS CON TEXTO CENTRADO Y FUENTE MÁS GRANDE (+2pt) */}
         <div className="bg-gray-900 border border-gray-800 text-white rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -789,18 +837,18 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-gray-800 text-xs">
-            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
-              <p className="text-gray-400 font-medium">Total Prestado</p>
-              <p className="font-bold text-gray-200 text-sm mt-0.5">${totalCapitalColocado.toFixed(2)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-gray-800">
+            <div className="bg-gray-950/60 p-4 rounded-2xl border border-gray-800/80 text-center">
+              <p className="text-gray-400 font-medium text-xs">Total Prestado</p>
+              <p className="font-black text-gray-200 text-base sm:text-lg mt-1">${totalCapitalColocado.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
-              <p className="text-gray-400 font-medium">Interés Pendiente</p>
-              <p className="font-bold text-yellow-400 text-sm mt-0.5">${totalInteresPendiente.toFixed(2)}</p>
+            <div className="bg-gray-950/60 p-4 rounded-2xl border border-gray-800/80 text-center">
+              <p className="text-gray-400 font-medium text-xs">Interés Pendiente</p>
+              <p className="font-black text-yellow-400 text-base sm:text-lg mt-1">${totalInteresPendiente.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
-              <p className="text-gray-400 font-medium">En Mora</p>
-              <p className="font-bold text-red-400 text-sm mt-0.5">${totalInteresAtrasado.toFixed(2)}</p>
+            <div className="bg-gray-950/60 p-4 rounded-2xl border border-gray-800/80 text-center">
+              <p className="text-gray-400 font-medium text-xs">En Mora</p>
+              <p className="font-black text-red-400 text-base sm:text-lg mt-1">${totalInteresAtrasado.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -1126,35 +1174,46 @@ export default function Home() {
           )}
 
           {!loading && activeTab === 'csv' && (
-            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
-              <div className="flex justify-between items-center">
-                <h2 className="text-base font-bold text-white">Importación Masiva de Clientes e Historial</h2>
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-5 shadow-md">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-white">Cargar Cartera e Historial Masivo</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Importa tus préstamos existentes desde Excel en segundos.</p>
+                </div>
                 <button
                   onClick={descargarPlantillaCSV}
-                  className="bg-gray-800 hover:bg-gray-700 text-blue-400 border border-gray-700 px-3 py-1.5 rounded-2xl font-bold text-xs transition"
+                  className="bg-blue-950/80 hover:bg-blue-900 text-blue-400 border border-blue-800/80 px-3.5 py-2 rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shrink-0"
                 >
                   📥 Descargar Plantilla .CSV
                 </button>
               </div>
 
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Pega tus datos separados por comas. Puedes cargar únicamente los clientes o incluir opcionalmente sus préstamos e historial de abonos:
-                <br />
-                <code className="bg-gray-950 px-2.5 py-1.5 rounded-xl text-[10px] text-gray-300 font-mono mt-1.5 block overflow-x-auto">
-                  Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha
-                </code>
-              </p>
+              {/* TUTORIAL ESCRITO Y PASOS CLAROS */}
+              <div className="bg-gray-950/60 border border-gray-800 rounded-2xl p-4 text-xs space-y-3">
+                <p className="font-bold text-blue-400 uppercase tracking-wide text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-gray-300 leading-relaxed">
+                  <li>Haz clic en <strong>Descargar Plantilla .CSV</strong> arriba y ábrela en Excel o Google Sheets.</li>
+                  <li>Llena tus clientes. Si un mismo cliente tiene <strong>varios préstamos o pagos</strong>, usa su misma <strong>Cédula</strong> en varias filas.</li>
+                  <li>Copia las filas desde Excel, pégalas en el cajón de abajo y presiona <strong>Procesar Cartera</strong>.</li>
+                </ol>
+                <div className="pt-2 border-t border-gray-800/80 text-[11px] text-gray-400">
+                  <span className="font-semibold text-gray-300">Formato de Columnas:</span>
+                  <code className="bg-gray-900 px-2 py-1 rounded-xl text-gray-200 block mt-1 overflow-x-auto font-mono">
+                    Nombre, Cédula, Teléfono, Dirección, MontoPréstamo, TasaQuincenal(%), FechaInicio(AAAA-MM-DD), MontoPago, FechaPago(AAAA-MM-DD)
+                  </code>
+                </div>
+              </div>
 
               <form onSubmit={handleCargarCSV} className="space-y-3 text-xs">
                 <textarea
-                  rows={6}
+                  rows={7}
                   value={csvTexto}
                   onChange={e => setCsvTexto(e.target.value)}
-                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon, 1000.00, 5, 2026-02-01, ,"
+                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Juan Perez, 8-888-8888, 6666-6666, Panama, , , 2026-02-15, 50.00, 2026-02-15&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon, 1000.00, 5, 2026-02-01, ,"
                   className={fieldInputStyle}
                 />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
-                  Cargar Datos Masivos
+                  Procesar y Cargar Cartera
                 </button>
               </form>
             </div>
