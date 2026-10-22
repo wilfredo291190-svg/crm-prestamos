@@ -36,6 +36,8 @@ export default function Home() {
 
   // Formularios CRM
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
+  const [clienteEditar, setClienteEditar] = useState<any>(null);
+  
   const [nuevoPrestamo, setNuevoPrestamo] = useState({ 
     cliente_id: '', 
     monto_original: '', 
@@ -55,7 +57,10 @@ export default function Home() {
   });
   const [csvTexto, setCsvTexto] = useState('');
 
-  // --- SISTEMA DE MODALES Y ALERTAS NATIVAS PWA (DARK MODE) ---
+  // EXPEDIENTE DIGITAL DE CLIENTE
+  const [clienteExpediente, setClienteExpediente] = useState<any>(null);
+
+  // SISTEMA DE MODALES Y ALERTAS NATIVAS PWA
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     tipo: 'alerta' | 'confirmacion' | 'exito' | 'error';
@@ -258,31 +263,54 @@ export default function Home() {
     return `${num.slice(0, 4)}-${num.slice(4, 8)}`;
   }
 
-  async function handleCrearCliente(e: React.FormEvent) {
+  // CREAR O EDITAR CLIENTE
+  async function handleGuardarCliente(e: React.FormEvent) {
     e.preventDefault();
-    if (!nuevoCliente.nombre_completo || !nuevoCliente.cedula || !nuevoCliente.telefono) {
+    const clienteData = clienteEditar || nuevoCliente;
+
+    if (!clienteData.nombre_completo || !clienteData.cedula || !clienteData.telefono) {
       return mostrarAlerta('Campos Requeridos', 'Por favor ingresa Nombre, Cédula y Teléfono.', 'alerta');
     }
 
-    const { error } = await supabase.from('clientes').insert([{
-      ...nuevoCliente,
-      user_id: session?.user?.id,
-      telefono: formatearTelefono(nuevoCliente.telefono)
-    }]);
+    if (clienteEditar) {
+      const { error } = await supabase
+        .from('clientes')
+        .update({
+          nombre_completo: clienteEditar.nombre_completo,
+          cedula: clienteEditar.cedula,
+          telefono: formatearTelefono(clienteEditar.telefono),
+          direccion: clienteEditar.direccion
+        })
+        .eq('id', clienteEditar.id);
 
-    if (error) {
-      mostrarAlerta('Error', 'No se pudo crear el cliente: ' + error.message, 'error');
+      if (error) {
+        mostrarAlerta('Error al Actualizar', error.message, 'error');
+      } else {
+        setClienteEditar(null);
+        cargarDatos();
+        mostrarAlerta('Cliente Actualizado', 'Los datos del cliente fueron guardados correctamente.', 'exito');
+      }
     } else {
-      setNuevoCliente({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
-      cargarDatos();
-      mostrarAlerta('Cliente Registrado', 'El cliente fue guardado correctamente.', 'exito');
+      const { error } = await supabase.from('clientes').insert([{
+        ...nuevoCliente,
+        user_id: session?.user?.id,
+        telefono: formatearTelefono(nuevoCliente.telefono)
+      }]);
+
+      if (error) {
+        mostrarAlerta('Error', 'No se pudo crear el cliente: ' + error.message, 'error');
+      } else {
+        setNuevoCliente({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
+        cargarDatos();
+        mostrarAlerta('Cliente Registrado', 'El cliente fue guardado correctamente.', 'exito');
+      }
     }
   }
 
   function handleBorrarCliente(id: string, nombre: string) {
     mostrarConfirmacion(
       '¿Eliminar Cliente?',
-      `¿Estás seguro de eliminar a ${nombre}? Se borrarán sus registros.`,
+      `¿Estás seguro de eliminar a ${nombre}? Se borrarán sus préstamos y pagos registrados.`,
       async () => {
         const { error } = await supabase.from('clientes').delete().eq('id', id);
         if (error) {
@@ -312,7 +340,7 @@ export default function Home() {
     document.body.removeChild(link);
   }
 
-  // CARGA MASIVA AVANZADA DE CARTERA (IDENTIFICACIÓN POR CÉDULA Y MÚLTIPLES PAGOS)
+  // CARGA MASIVA AVANZADA DE CARTERA
   async function handleCargarCSV(e: React.FormEvent) {
     e.preventDefault();
     if (!csvTexto.trim()) return mostrarAlerta('Archivo Vacío', 'Pega las filas de tu Excel o CSV para continuar.', 'alerta');
@@ -324,7 +352,7 @@ export default function Home() {
 
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i].trim();
-      if (!fila || fila.toLowerCase().startsWith('nombre')) continue; // Omitir encabezados
+      if (!fila || fila.toLowerCase().startsWith('nombre')) continue;
 
       const col = fila.split(',');
       if (col.length >= 3) {
@@ -339,7 +367,6 @@ export default function Home() {
         const pagoFecha = col[8]?.trim() || new Date().toISOString().split('T')[0];
 
         if (cedula) {
-          // 1. Buscar o Crear Cliente por Cédula
           let clienteId = null;
           const { data: clienteExiste } = await supabase
             .from('clientes')
@@ -366,7 +393,6 @@ export default function Home() {
           }
 
           if (clienteId) {
-            // 2. Buscar o Crear Préstamo Activo del Cliente
             let prestamoId = null;
             let capitalActual = 0;
 
@@ -388,7 +414,6 @@ export default function Home() {
                 prestamosProcesados++;
               }
             } else {
-              // Buscar el último préstamo activo de este cliente
               const { data: prestamoExistente } = await supabase
                 .from('prestamos')
                 .select('*')
@@ -405,7 +430,6 @@ export default function Home() {
               }
             }
 
-            // 3. Registrar Pago Histórico si aplica
             if (prestamoId && pagoMonto > 0) {
               const interesQuincenal = (capitalActual * tasaQuincenal) / 100;
               const aplicadoInteres = Math.min(pagoMonto, interesQuincenal);
@@ -825,7 +849,7 @@ export default function Home() {
           </button>
         </header>
 
-        {/* TARJETA DE MÉTRICAS CON TEXTO CENTRADO Y FUENTE MÁS GRANDE (+2pt) */}
+        {/* TARJETA DE MÉTRICAS */}
         <div className="bg-gray-900 border border-gray-800 text-white rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -864,7 +888,11 @@ export default function Home() {
                 {prestamos.map((p) => {
                   const est = getEstadoCliente(p.cliente_id);
                   return (
-                    <div key={p.id} className="py-4 flex justify-between items-center text-xs">
+                    <div 
+                      key={p.id} 
+                      onClick={() => setClienteExpediente(p.clientes)}
+                      className="py-4 flex justify-between items-center text-xs cursor-pointer hover:bg-gray-800/50 p-2 rounded-xl transition"
+                    >
                       <div>
                         <p className="font-bold text-white text-sm">{p.clientes?.nombre_completo || 'N/A'}</p>
                         <p className="text-gray-400 mt-0.5">Cédula: {p.clientes?.cedula || 'N/A'}</p>
@@ -886,14 +914,27 @@ export default function Home() {
           {!loading && activeTab === 'clientes' && (
             <div className="space-y-6">
               <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
-                <h2 className="text-base font-bold text-white">Registrar Nuevo Cliente</h2>
-                <form onSubmit={handleCrearCliente} className="space-y-3.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-base font-bold text-white">
+                    {clienteEditar ? 'Editar Datos del Cliente' : 'Registrar Nuevo Cliente'}
+                  </h2>
+                  {clienteEditar && (
+                    <button
+                      onClick={() => setClienteEditar(null)}
+                      className="text-xs bg-gray-800 text-gray-300 px-3 py-1 rounded-xl hover:bg-gray-700 transition"
+                    >
+                      Cancelar Edición
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleGuardarCliente} className="space-y-3.5 text-xs">
                   <div>
                     <label className="block font-semibold text-gray-300 mb-1">Nombre Completo *</label>
                     <input 
                       type="text" 
-                      value={nuevoCliente.nombre_completo} 
-                      onChange={e => setNuevoCliente({...nuevoCliente, nombre_completo: e.target.value})}
+                      value={clienteEditar ? clienteEditar.nombre_completo : nuevoCliente.nombre_completo} 
+                      onChange={e => clienteEditar ? setClienteEditar({...clienteEditar, nombre_completo: e.target.value}) : setNuevoCliente({...nuevoCliente, nombre_completo: e.target.value})}
                       className={fieldInputStyle}
                       placeholder="Juan Pérez"
                     />
@@ -903,8 +944,8 @@ export default function Home() {
                       <label className="block font-semibold text-gray-300 mb-1">Cédula *</label>
                       <input 
                         type="text" 
-                        value={nuevoCliente.cedula} 
-                        onChange={e => setNuevoCliente({...nuevoCliente, cedula: e.target.value})}
+                        value={clienteEditar ? clienteEditar.cedula : nuevoCliente.cedula} 
+                        onChange={e => clienteEditar ? setClienteEditar({...clienteEditar, cedula: e.target.value}) : setNuevoCliente({...nuevoCliente, cedula: e.target.value})}
                         className={fieldInputStyle}
                         placeholder="8-888-8888"
                       />
@@ -913,8 +954,8 @@ export default function Home() {
                       <label className="block font-semibold text-gray-300 mb-1">Teléfono *</label>
                       <input 
                         type="text" 
-                        value={nuevoCliente.telefono} 
-                        onChange={e => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
+                        value={clienteEditar ? clienteEditar.telefono : nuevoCliente.telefono} 
+                        onChange={e => clienteEditar ? setClienteEditar({...clienteEditar, telefono: e.target.value}) : setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
                         className={fieldInputStyle}
                         placeholder="6666-6666"
                       />
@@ -924,14 +965,14 @@ export default function Home() {
                     <label className="block font-semibold text-gray-300 mb-1">Dirección</label>
                     <input 
                       type="text" 
-                      value={nuevoCliente.direccion} 
-                      onChange={e => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
+                      value={clienteEditar ? clienteEditar.direccion : nuevoCliente.direccion} 
+                      onChange={e => clienteEditar ? setClienteEditar({...clienteEditar, direccion: e.target.value}) : setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
                       className={fieldInputStyle}
                       placeholder="Panamá"
                     />
                   </div>
                   <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
-                    Guardar Cliente
+                    {clienteEditar ? 'Guardar Cambios' : 'Guardar Cliente'}
                   </button>
                 </form>
               </div>
@@ -943,7 +984,10 @@ export default function Home() {
                     const est = getEstadoCliente(c.id);
                     return (
                       <div key={c.id} className="py-3 flex justify-between items-center text-xs">
-                        <div>
+                        <div 
+                          onClick={() => setClienteExpediente(c)}
+                          className="cursor-pointer hover:underline"
+                        >
                           <p className="font-bold text-white text-sm">{c.nombre_completo}</p>
                           <p className="text-gray-400 mt-0.5">Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
                         </div>
@@ -952,8 +996,14 @@ export default function Home() {
                             {est.label}
                           </span>
                           <button 
+                            onClick={() => setClienteEditar(c)}
+                            className="text-blue-400 hover:text-blue-300 bg-blue-950/80 border border-blue-800/80 px-2.5 py-1 rounded-2xl font-bold text-[11px] transition hover:bg-blue-900"
+                          >
+                            Editar
+                          </button>
+                          <button 
                             onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
-                            className="text-red-400 hover:text-red-300 bg-red-950/80 border border-red-800/80 px-3 py-1.5 rounded-2xl font-bold text-[11px] transition hover:bg-red-900"
+                            className="text-red-400 hover:text-red-300 bg-red-950/80 border border-red-800/80 px-2.5 py-1 rounded-2xl font-bold text-[11px] transition hover:bg-red-900"
                           >
                             Eliminar
                           </button>
@@ -1188,7 +1238,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* TUTORIAL ESCRITO Y PASOS CLAROS */}
               <div className="bg-gray-950/60 border border-gray-800 rounded-2xl p-4 text-xs space-y-3">
                 <p className="font-bold text-blue-400 uppercase tracking-wide text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
                 <ol className="list-decimal list-inside space-y-1.5 text-gray-300 leading-relaxed">
@@ -1222,7 +1271,82 @@ export default function Home() {
 
       </div>
 
-      {/* MODAL PWA */}
+      {/* EXPEDIENTE DIGITAL DE CLIENTE (MODAL DEDICADO) */}
+      {clienteExpediente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex justify-between items-start border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">{clienteExpediente.nombre_completo}</h3>
+                <p className="text-gray-400 mt-0.5">Cédula: {clienteExpediente.cedula} | Teléfono: {clienteExpediente.telefono}</p>
+                <p className="text-gray-500 mt-0.5">Dirección: {clienteExpediente.direccion || 'Panamá'}</p>
+              </div>
+              <button 
+                onClick={() => setClienteExpediente(null)}
+                className="text-gray-400 hover:text-white font-bold text-base p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* PRÉSTAMOS DEL CLIENTE */}
+            <div className="space-y-3">
+              <h4 className="font-bold text-blue-400 uppercase tracking-wide">Préstamos Registrados</h4>
+              <div className="space-y-2">
+                {prestamos.filter(p => p.cliente_id === clienteExpediente.id).map(p => (
+                  <div key={p.id} className="bg-gray-950/80 p-3 rounded-xl border border-gray-800 space-y-1">
+                    <div className="flex justify-between font-bold text-white">
+                      <span>Monto Original: ${Number(p.monto_original).toFixed(2)}</span>
+                      <span className={p.estado === 'activo' ? 'text-yellow-400' : 'text-emerald-400'}>
+                        {p.estado === 'activo' ? `Pendiente: $${Number(p.capital_pendiente).toFixed(2)}` : 'CANCELADO'}
+                      </span>
+                    </div>
+                    <p className="text-gray-400 text-[11px]">
+                      Tasa: {p.tasa_quincenal}% Quincenal | Inicio: {new Date(p.fecha_inicio).toLocaleDateString('es-PA')} | Esquema: {p.esquema_cobro}
+                    </p>
+                  </div>
+                ))}
+                {prestamos.filter(p => p.cliente_id === clienteExpediente.id).length === 0 && (
+                  <p className="text-gray-500 italic">Este cliente no tiene préstamos registrados.</p>
+                )}
+              </div>
+            </div>
+
+            {/* HISTORIAL DE ABONOS DEL CLIENTE */}
+            <div className="space-y-3 pt-2">
+              <h4 className="font-bold text-blue-400 uppercase tracking-wide">Historial de Abonos</h4>
+              <div className="divide-y divide-gray-800 bg-gray-950/80 rounded-xl border border-gray-800 p-3">
+                {pagos.filter(p => p.prestamos?.cliente_id === clienteExpediente.id).map(p => (
+                  <div key={p.id} className="py-2 flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold text-gray-200">{new Date(p.fecha_pago).toLocaleDateString('es-PA')}</p>
+                      <p className="text-gray-400 text-[10px]">{p.notas}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-emerald-400">+${Number(p.monto_total).toFixed(2)}</p>
+                      <p className="text-[10px] text-gray-500">Int: ${Number(p.aplicado_interes).toFixed(2)} | Cap: ${Number(p.aplicado_capital).toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))}
+                {pagos.filter(p => p.prestamos?.cliente_id === clienteExpediente.id).length === 0 && (
+                  <p className="text-gray-500 italic text-center py-2">No hay abonos registrados para este cliente.</p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setClienteExpediente(null)}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition"
+            >
+              Cerrar Expediente
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PWA GENERAL */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 text-center">
