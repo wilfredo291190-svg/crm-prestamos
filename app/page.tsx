@@ -57,8 +57,10 @@ export default function Home() {
   });
   const [csvTexto, setCsvTexto] = useState('');
 
-  // EXPEDIENTE DIGITAL DE CLIENTE
+  // EXPEDIENTE DIGITAL Y TUTORIALES
   const [clienteExpediente, setClienteExpediente] = useState<any>(null);
+  const [mostrarTutorial, setMostrarTutorial] = useState(false);
+  const [tutorialSeccion, setTutorialSeccion] = useState<'general' | 'csv' | 'interes' | 'whatsapp'>('general');
 
   // SISTEMA DE MODALES Y ALERTAS NATIVAS PWA
   const [modalConfig, setModalConfig] = useState<{
@@ -817,12 +819,20 @@ export default function Home() {
               </div>
             </div>
             
-            <button 
-              onClick={handleSignOut}
-              className="sm:hidden text-xs bg-red-950/80 hover:bg-red-900 text-red-400 border border-red-800/80 px-3 py-2 rounded-2xl font-bold transition shrink-0 h-10 flex items-center justify-center shadow-sm"
-            >
-              Cerrar Sesión
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setMostrarTutorial(true)}
+                className="text-xs bg-blue-950/80 hover:bg-blue-900 text-blue-400 border border-blue-800/80 px-3 py-2 rounded-2xl font-bold transition flex items-center gap-1 shadow-sm"
+              >
+                ❓ Ayuda
+              </button>
+              <button 
+                onClick={handleSignOut}
+                className="sm:hidden text-xs bg-red-950/80 hover:bg-red-900 text-red-400 border border-red-800/80 px-3 py-2 rounded-2xl font-bold transition shrink-0 h-10 flex items-center justify-center shadow-sm"
+              >
+                Salir
+              </button>
+            </div>
           </div>
 
           <nav className="w-full sm:w-auto flex flex-wrap sm:flex-nowrap bg-gray-950 p-1.5 rounded-2xl border border-gray-800 gap-1.5 justify-center">
@@ -1239,7 +1249,18 @@ export default function Home() {
               </div>
 
               <div className="bg-gray-950/60 border border-gray-800 rounded-2xl p-4 text-xs space-y-3">
-                <p className="font-bold text-blue-400 uppercase tracking-wide text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
+                <div className="flex justify-between items-center">
+                  <p className="font-bold text-blue-400 uppercase tracking-wide text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
+                  <button 
+                    onClick={() => {
+                      setTutorialSeccion('csv');
+                      setMostrarTutorial(true);
+                    }}
+                    className="text-[10px] text-blue-400 hover:underline font-bold"
+                  >
+                    Ver Tutorial Completo ➔
+                  </button>
+                </div>
                 <ol className="list-decimal list-inside space-y-1.5 text-gray-300 leading-relaxed">
                   <li>Haz clic en <strong>Descargar Plantilla .CSV</strong> arriba y ábrela en Excel o Google Sheets.</li>
                   <li>Llena tus clientes. Si un mismo cliente tiene <strong>varios préstamos o pagos</strong>, usa su misma <strong>Cédula</strong> en varias filas.</li>
@@ -1271,7 +1292,105 @@ export default function Home() {
 
       </div>
 
-      {/* EXPEDIENTE DIGITAL DE CLIENTE (MODAL DEDICADO) */}
+      {/* MODAL DE TUTORIALES Y GUÍA DE USO */}
+      {mostrarTutorial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">📖 Centro de Ayuda Presta'o</h3>
+                <p className="text-gray-400 text-[11px] mt-0.5">Aprende a gestionar tu cartera como un profesional.</p>
+              </div>
+              <button 
+                onClick={() => setMostrarTutorial(false)}
+                className="text-gray-400 hover:text-white font-bold text-base p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* BOTONES DE NAVEGACIÓN DEL TUTORIAL */}
+            <div className="flex gap-2 border-b border-gray-800 pb-2 overflow-x-auto">
+              {[
+                { id: 'general', label: '1. General' },
+                { id: 'csv', label: '2. Cargar Cartera' },
+                { id: 'interes', label: '3. Interés e Aislamiento' },
+                { id: 'whatsapp', label: '4. Recibos WhatsApp' }
+              ].map(sec => (
+                <button
+                  key={sec.id}
+                  onClick={() => setTutorialSeccion(sec.id as any)}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap text-[11px] transition ${
+                    tutorialSeccion === sec.id ? 'bg-blue-600 text-white' : 'bg-gray-950 text-gray-400 hover:bg-gray-800'
+                  }`}
+                >
+                  {sec.label}
+                </button>
+              ))}
+            </div>
+
+            {/* SECCIONES DEL TUTORIAL */}
+            <div className="space-y-3 leading-relaxed text-gray-300">
+              {tutorialSeccion === 'general' && (
+                <>
+                  <h4 className="font-bold text-white text-sm">💡 ¿Cómo funciona Presta'o?</h4>
+                  <p>Presta'o te ayuda a administrar tus créditos personales separando clientes, préstamos y abonos de forma automatizada.</p>
+                  <ul className="list-disc list-inside space-y-1 pl-2">
+                    <li><strong>Dashboard:</strong> Muestra tu capital colocado, pendiente y montos en mora.</li>
+                    <li><strong>Clientes:</strong> Guarda el nombre, cédula y teléfono de tus clientes. Puedes ver su ficha haciendo clic en su nombre.</li>
+                    <li><strong>Préstamos:</strong> Registra nuevos préstamos con tasa quincenal (5%, 8%, 10%, etc.).</li>
+                    <li><strong>Cobros:</strong> Procesa abonos en Yappy o ACH. El sistema liquida automáticamente primero el interés y luego reduce el capital.</li>
+                  </ul>
+                </>
+              )}
+
+              {tutorialSeccion === 'csv' && (
+                <>
+                  <h4 className="font-bold text-white text-sm">📥 Guía de Carga Masiva desde Excel</h4>
+                  <p>Si ya tienes una libreta o Excel con tus préstamos actuales, puedes importarla de un solo golpe:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 pl-2">
+                    <li>Entra a la pestaña <strong>Cargar Cartera</strong> y presiona <strong>Descargar Plantilla .CSV</strong>.</li>
+                    <li>Abre el archivo en Excel y completa las columnas: <code>Nombre, Cédula, Teléfono, Dirección, MontoPréstamo, TasaQuincenal, FechaInicio, MontoPago, FechaPago</code>.</li>
+                    <li><strong>Para Múltiples Pagos o Préstamos:</strong> Si un cliente tiene 2 préstamos o 3 abonos pasados, usa su **misma cédula** en filas diferentes. El sistema vinculará las operaciones al mismo cliente.</li>
+                    <li>Copia todas las filas en Excel, pégalas en el recuadro de la app y presiona <strong>Procesar Cartera</strong>.</li>
+                  </ol>
+                </>
+              )}
+
+              {tutorialSeccion === 'interes' && (
+                <>
+                  <h4 className="font-bold text-white text-sm">🧮 Motor Financiero y Prelación</h4>
+                  <p>Presta'o calcula los intereses de forma justa sobre el <strong>Saldo Insoluto (Capital Restante)</strong>:</p>
+                  <ul className="list-disc list-inside space-y-1 pl-2">
+                    <li>Si alguien te debe $1,000 al 10% quincenal, paga $100 de interés por quincena.</li>
+                    <li>Si el cliente abona $300 ($100 a interés y $200 a capital), su nuevo saldo será $800.</li>
+                    <li>Para la siguiente quincena, el 10% se calculará sobre los **$800 restantes** ($80.00 de interés), reduciendo la cuota del cliente.</li>
+                  </ul>
+                </>
+              )}
+
+              {tutorialSeccion === 'whatsapp' && (
+                <>
+                  <h4 className="font-bold text-white text-sm">📲 Envío de Recibos por WhatsApp</h4>
+                  <p>Cada vez que registras un cobro en la pestaña <strong>Cobros</strong> o abres el historial de cobros:</p>
+                  <p>Verás el botón verde <strong>📲 WhatsApp</strong>. Al presionarlo, Presta'o abrirá tu WhatsApp y redactará automáticamente un comprobante con el desglose abonado (interés / capital) y el saldo pendiente restante.</p>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => setMostrarTutorial(false)}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition mt-4"
+            >
+              Entendido / Cerrar Ayuda
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {/* EXPEDIENTE DIGITAL DE CLIENTE */}
       {clienteExpediente && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto">
@@ -1290,7 +1409,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* PRÉSTAMOS DEL CLIENTE */}
             <div className="space-y-3">
               <h4 className="font-bold text-blue-400 uppercase tracking-wide">Préstamos Registrados</h4>
               <div className="space-y-2">
@@ -1313,7 +1431,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* HISTORIAL DE ABONOS DEL CLIENTE */}
             <div className="space-y-3 pt-2">
               <h4 className="font-bold text-blue-400 uppercase tracking-wide">Historial de Abonos</h4>
               <div className="divide-y divide-gray-800 bg-gray-950/80 rounded-xl border border-gray-800 p-3">
