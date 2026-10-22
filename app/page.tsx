@@ -642,51 +642,19 @@ export default function Home() {
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
         {/* NAVEGACIÓN SUPERIOR */}
-       <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
-  <div className="flex items-center justify-between w-full sm:w-auto gap-3">
-    <div className="flex items-center gap-3">
-      <div className="w-9 h-9 rounded-xl bg-gray-950 border border-gray-800 p-1.5 flex items-center justify-center shadow-md shrink-0">
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d="M 15 85 V 15 C 15 10, 20 5, 28 5 H 38 C 46 5, 52 10, 52 15 V 35 L 70 20 C 76 15, 85 17, 89 23 C 93 29, 91 38, 85 42 L 52 65 V 85 C 52 90, 46 95, 38 95 H 28 C 20 95, 15 90, 15 85 Z" fill="#1D4ED8"/>
-          <path d="M 45 10 C 72 10, 95 24, 95 50 C 95 72, 75 88, 52 88 L 38 88 L 52 74 C 68 74, 78 63, 78 50 C 78 36, 64 26, 45 26 H 36 V 10 Z" fill="#38BDF8"/>
-        </svg>
-      </div>
-      <div>
-        <h1 className="text-lg font-extrabold text-white tracking-wide leading-none">Presta'o</h1>
-        <p className="text-[10px] text-gray-400 mt-0.5">Gestión Inteligente de Créditos</p>
-      </div>
-    </div>
-    
-    <button 
-      onClick={handleSignOut}
-      className="sm:hidden text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-2.5 py-1.5 rounded-lg font-bold transition shrink-0"
-    >
-      Salir
-    </button>
-  </div>
+      -- 1. Agregar columna user_id a la tabla clientes
+ALTER TABLE clientes 
+ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
-  {/* BARRA DE NAVEGACIÓN TOTALMENTE INDEPENDIENTE Y ADAPTABLE */}
-  <nav className="w-full sm:w-auto flex flex-wrap sm:flex-nowrap bg-gray-950 p-1.5 rounded-xl border border-gray-800 gap-1.5 justify-center">
-    {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
-      <button
-        key={tab}
-        onClick={() => cambiarPestana(tab)}
-        className={`flex-1 sm:flex-none py-2 px-2.5 text-center rounded-lg capitalize transition font-bold text-xs whitespace-nowrap min-w-[65px] ${
-          activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'
-        }`}
-      >
-        {tab === 'pagos' ? 'Cobros' : tab === 'csv' ? 'CSV' : tab}
-      </button>
-    ))}
-  </nav>
+-- 2. Agregar columna user_id a prestamos y pagos por seguridad
+ALTER TABLE prestamos 
+ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
-  <button 
-    onClick={handleSignOut}
-    className="hidden sm:block text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-3 py-2 rounded-xl font-bold transition shrink-0"
-  >
-    Salir
-  </button>
-</header>
+ALTER TABLE pagos 
+ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- 3. Notificar a Supabase para refrescar la caché del esquema
+NOTIFY pgrst, 'reload schema';
 
         {/* METRICAS PRINCIPALES */}
         <div className="bg-gray-900 border border-gray-800 text-white rounded-3xl p-6 shadow-xl space-y-6">
