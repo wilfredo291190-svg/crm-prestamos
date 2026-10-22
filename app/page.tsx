@@ -7,24 +7,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ISOTIPO/LOGO OFICIAL PRESTAO VECTORIAL (AZUL #2563EB, CELESTE #00B9FF, BLANCO #FFFFFF)
-function PrestaoLogo({ className = "w-10 h-10" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 500 500" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Pliegue Superior Celeste */}
-      <path d="M148.5 45H290C348 45 395 92 395 150C395 180 380 207 356 225L235 120C215 103 185 103 165 120L148.5 45Z" fill="#00B9FF" />
-      {/* Cuerpo Principal P Azul */}
-      <path d="M148.5 150V405C148.5 432.6 170.9 455 198.5 455C226.1 455 248.5 432.6 248.5 405V280L356 195C380 176 395 147 395 115C395 62.5 352.5 20 300 20H198.5C170.9 20 148.5 42.4 148.5 70V150Z" fill="#2563EB" />
-    </svg>
-  );
-}
-
 export default function Home() {
   // Estado de Sesión y Autenticación
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Selector de Tema (dark | light | system)
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
+  const [effectiveTheme, setEffectiveTheme] = useState<'dark' | 'light'>('dark');
+
   // Campos del Formulario de Auth
   const [authIdentifier, setAuthIdentifier] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -88,6 +80,24 @@ export default function Home() {
     mensaje: ''
   });
 
+  // Manejador del Tema (Dark / Light / System)
+  useEffect(() => {
+    const handleThemeChange = () => {
+      if (theme === 'system') {
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setEffectiveTheme(isDark ? 'dark' : 'light');
+      } else {
+        setEffectiveTheme(theme);
+      }
+    };
+
+    handleThemeChange();
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', handleThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleThemeChange);
+  }, [theme]);
+
   function mostrarAlerta(titulo: string, mensaje: string, tipo: 'alerta' | 'exito' | 'error' = 'alerta') {
     setModalConfig({ isOpen: true, tipo, titulo, mensaje });
   }
@@ -101,7 +111,7 @@ export default function Home() {
   }
 
   function calcularFuerzaPassword(pass: string) {
-    if (!pass) return { score: 0, label: '', color: 'bg-gray-200' };
+    if (!pass) return { score: 0, label: '', color: 'bg-gray-800' };
     let score = 0;
     if (pass.length >= 8) score += 1;
     if (/[A-Z]/.test(pass) || /[0-9]/.test(pass)) score += 1;
@@ -251,7 +261,7 @@ export default function Home() {
 
   function getEstadoCliente(clienteId: string) {
     const prestamosCliente = prestamos.filter(p => p.cliente_id === clienteId && p.estado === 'activo');
-    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
+    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: effectiveTheme === 'dark' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-300' };
 
     const hoyStr = new Date().toISOString().split('T')[0];
     let tieneMora = false;
@@ -264,8 +274,8 @@ export default function Home() {
       }
     }
 
-    if (tieneMora) return { label: 'En Mora', color: 'bg-red-50 text-red-700 border-red-300' };
-    return { label: 'Al Día', color: 'bg-emerald-50 text-emerald-700 border-emerald-300' };
+    if (tieneMora) return { label: 'En Mora', color: effectiveTheme === 'dark' ? 'bg-red-950/80 text-red-400 border-red-800' : 'bg-red-50 text-red-700 border-red-300' };
+    return { label: 'Al Día', color: effectiveTheme === 'dark' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-300' };
   }
 
   function formatearTelefono(val: string) {
@@ -597,7 +607,11 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+  const isDark = effectiveTheme === 'dark';
+
+  const fieldInputStyle = isDark
+    ? "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
+    : "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   const tabNames: Record<string, string> = {
     dashboard: 'Dashboard',
@@ -609,8 +623,7 @@ export default function Home() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-white text-blue-600 flex flex-col items-center justify-center space-y-3">
-        <PrestaoLogo className="w-16 h-16 animate-bounce" />
+      <div className={`min-h-screen flex flex-col items-center justify-center space-y-3 ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
         <p className="text-sm font-bold tracking-wide animate-pulse">Cargando Prestao...</p>
       </div>
     );
@@ -619,7 +632,7 @@ export default function Home() {
   // --- VISTA 1: LOGIN / REGISTRO ---
   if (!session) {
     return (
-      <div className="min-h-screen bg-gray-50 text-gray-900 flex items-center justify-center p-4">
+      <div className={`min-h-screen flex items-center justify-center p-4 ${isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
         <style jsx global>{`
           input, select, textarea {
             color: #000000 !important;
@@ -633,19 +646,21 @@ export default function Home() {
           }
         `}</style>
         
-        <div className="w-full max-w-sm bg-white border border-gray-200 rounded-3xl p-6 shadow-xl space-y-6">
+        <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-6 border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
           
           <div className="text-center space-y-2">
-            <PrestaoLogo className="w-16 h-16 mx-auto" />
-            <h1 className="text-2xl font-black text-blue-600 tracking-tight">Prestao</h1>
-            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Gestor de Microcréditos</p>
+            <div className="w-16 h-16 mx-auto flex items-center justify-center">
+              <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" onError={(e: any) => { e.target.onerror = null; e.target.src = 'https://raw.githubusercontent.com/wilfredo291190-svg/crm-prestamos/main/public/logo.png'; }} />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-blue-500">Prestao</h1>
+            <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gestor de Microcréditos</p>
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4 text-xs" autoComplete="off">
             {isRegistering ? (
               <>
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Nombre de Usuario *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nombre de Usuario *</label>
                   <input 
                     type="text" 
                     value={regUsername} 
@@ -656,7 +671,7 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Nombre Completo *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nombre Completo *</label>
                   <input 
                     type="text" 
                     value={regNombre} 
@@ -667,7 +682,7 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Correo Electrónico *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Correo Electrónico *</label>
                   <input 
                     type="email" 
                     value={regEmail} 
@@ -680,7 +695,7 @@ export default function Home() {
               </>
             ) : (
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">Usuario o Correo Electrónico *</label>
+                <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Usuario o Correo Electrónico *</label>
                 <input 
                   type="text" 
                   value={authIdentifier} 
@@ -694,7 +709,7 @@ export default function Home() {
 
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block font-semibold text-gray-700">Contraseña *</label>
+                <label className={`block font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Contraseña *</label>
                 <span className="text-[10px] text-gray-400">Mínimo 8 caracteres</span>
               </div>
               <div className="relative">
@@ -717,13 +732,13 @@ export default function Home() {
 
               {authPassword.length > 0 && (
                 <div className="mt-2 space-y-1">
-                  <div className="flex gap-1 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`flex gap-1 h-1.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}>
                     <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 1 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
                     <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 2 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
                     <div className={`h-full transition-all duration-300 ${fuerzaPass.score >= 3 ? fuerzaPass.color : 'bg-transparent'} w-1/3`} />
                   </div>
-                  <p className="text-[10px] text-gray-500 text-right">
-                    Seguridad: <span className="font-bold text-gray-700">{fuerzaPass.label}</span>
+                  <p className="text-[10px] text-gray-400 text-right">
+                    Seguridad: <span className="font-bold text-gray-200">{fuerzaPass.label}</span>
                   </p>
                 </div>
               )}
@@ -732,57 +747,33 @@ export default function Home() {
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold py-3.5 rounded-2xl transition shadow-lg text-sm text-center tracking-wide"
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-bold py-3.5 rounded-2xl transition shadow-lg text-sm text-center tracking-wide"
             >
               {isSubmitting ? 'Procesando...' : isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
             </button>
           </form>
 
-          <div className="text-center pt-2 border-t border-gray-100">
+          <div className="text-center pt-2 border-t border-gray-800">
             <button 
               onClick={() => {
                 setIsRegistering(!isRegistering);
                 setAuthIdentifier('');
                 setAuthPassword('');
               }}
-              className="text-xs text-blue-600 hover:underline font-semibold"
+              className="text-xs text-blue-400 hover:underline font-semibold"
             >
               {isRegistering ? '¿Ya tienes cuenta? Inicia Sesión' : '¿No tienes cuenta? Regístrate aquí'}
             </button>
           </div>
         </div>
 
-        {modalConfig.isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="bg-white border border-gray-200 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
-              <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-lg font-bold">
-                {modalConfig.tipo === 'confirmacion' && <span className="bg-red-50 text-red-600 border border-red-200 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
-                {modalConfig.tipo === 'exito' && <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 w-full h-full rounded-2xl flex items-center justify-center">✓</span>}
-                {modalConfig.tipo === 'error' && <span className="bg-red-50 text-red-600 border border-red-200 w-full h-full rounded-2xl flex items-center justify-center">✕</span>}
-                {modalConfig.tipo === 'alerta' && <span className="bg-blue-50 text-blue-600 border border-blue-200 w-full h-full rounded-2xl flex items-center justify-center">ℹ</span>}
-              </div>
-
-              <div>
-                <h3 className="text-base font-bold text-gray-900">{modalConfig.titulo}</h3>
-                <p className="text-xs text-gray-600 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
-              </div>
-
-              <button
-                onClick={cerrarModal}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl transition shadow-md font-bold text-xs"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
   // --- VISTA 2: CRM DASHBOARD COMPLETO ---
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans py-6 px-4">
+    <div className={`min-h-screen font-sans py-6 px-4 ${isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
       <style jsx global>{`
         input, select, textarea {
           color: #000000 !important;
@@ -802,34 +793,30 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* ENCABEZADO Y NAVEGACIÓN */}
-        <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-3xl border border-gray-200 shadow-sm">
+        {/* ENCABEZADO Y NAVEGACIÓN (SIN BOTÓN SOBREPUESTO) */}
+        <header className={`flex flex-col sm:flex-row justify-between items-center gap-4 p-4 rounded-3xl border shadow-lg ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
-              <PrestaoLogo className="w-10 h-10 shrink-0" />
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" onError={(e: any) => { e.target.onerror = null; e.target.src = 'https://raw.githubusercontent.com/wilfredo291190-svg/crm-prestamos/main/public/logo.png'; }} />
+              </div>
               <div>
-                <h1 className="text-lg font-black text-blue-600 tracking-tight leading-none">Prestao</h1>
-                <p className="text-[10px] text-gray-500 font-semibold mt-0.5 uppercase tracking-wider">Gestor de Microcréditos</p>
+                <h1 className="text-lg font-black text-blue-500 tracking-tight leading-none">Prestao</h1>
+                <p className={`text-[10px] mt-0.5 font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gestor de Microcréditos</p>
               </div>
             </div>
             
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setMostrarTutorial(true)}
-                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-2 rounded-2xl font-bold transition flex items-center gap-1 shadow-sm"
-              >
-                ❓ Ayuda
-              </button>
-              <button 
-                onClick={handleSignOut}
-                className="sm:hidden text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-2 rounded-2xl font-bold transition shrink-0 h-10 flex items-center justify-center shadow-sm"
-              >
-                Salir
-              </button>
-            </div>
+            <button 
+              onClick={() => setMostrarTutorial(true)}
+              className={`text-xs px-3.5 py-2 rounded-2xl font-bold transition flex items-center gap-1 border shadow-sm ${
+                isDark ? 'bg-blue-950/80 text-blue-400 border-blue-800/80 hover:bg-blue-900' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
+              }`}
+            >
+              ❓ Ayuda
+            </button>
           </div>
 
-          <nav className="w-full sm:w-auto flex flex-wrap sm:flex-nowrap bg-gray-100 p-1.5 rounded-2xl border border-gray-200 gap-1.5 justify-center">
+          <nav className={`w-full sm:w-auto flex flex-wrap sm:flex-nowrap p-1.5 rounded-2xl border gap-1.5 justify-center ${isDark ? 'bg-gray-950 border-gray-800' : 'bg-gray-100 border-gray-200'}`}>
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
                 key={tab}
@@ -837,72 +824,67 @@ export default function Home() {
                 className={`flex-1 sm:flex-none py-2.5 px-3 text-center rounded-2xl transition font-bold text-xs whitespace-nowrap min-w-[70px] h-10 flex items-center justify-center ${
                   activeTab === tab 
                     ? 'bg-blue-600 text-white shadow-md' 
-                    : 'text-gray-600 hover:text-black hover:bg-white'
+                    : isDark ? 'text-gray-400 hover:text-white hover:bg-gray-900' : 'text-gray-600 hover:text-black hover:bg-white'
                 }`}
               >
                 {tabNames[tab]}
               </button>
             ))}
           </nav>
-
-          <button 
-            onClick={handleSignOut}
-            className="hidden sm:flex text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2.5 rounded-2xl font-bold transition shrink-0 h-10 items-center justify-center shadow-sm"
-          >
-            Cerrar Sesión
-          </button>
         </header>
 
         {/* TARJETA DE MÉTRICAS */}
-        <div className="bg-white border border-gray-200 text-gray-900 rounded-3xl p-6 shadow-sm space-y-6">
+        <div className={`rounded-3xl p-6 shadow-xl space-y-6 border ${isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Capital Activo Pendiente</p>
-              <p className="text-3xl sm:text-4xl font-black mt-1 text-blue-600">${totalCapitalPendiente.toFixed(2)}</p>
+              <p className={`text-xs font-semibold tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capital Activo Pendiente</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1 text-blue-500">${totalCapitalPendiente.toFixed(2)}</p>
             </div>
-            <div className="self-start sm:self-center bg-emerald-50 text-emerald-700 text-xs px-4 py-2 rounded-2xl font-bold border border-emerald-200 shadow-sm">
+            <div className={`self-start sm:self-center text-xs px-4 py-2 rounded-2xl font-bold border shadow-sm ${
+              isDark ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>
               ${totalInteresCobrado.toFixed(2)} Cobrado
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-gray-100">
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-center">
-              <p className="text-gray-500 font-medium text-xs">Total Prestado</p>
-              <p className="font-black text-gray-900 text-base sm:text-lg mt-1">${totalCapitalColocado.toFixed(2)}</p>
+          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className={`p-4 rounded-2xl border text-center ${isDark ? 'bg-gray-950/60 border-gray-800/80' : 'bg-gray-50 border-gray-200'}`}>
+              <p className={`font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Prestado</p>
+              <p className={`font-black text-base sm:text-lg mt-1 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>${totalCapitalColocado.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-center">
-              <p className="text-gray-500 font-medium text-xs">Interés Pendiente</p>
-              <p className="font-black text-amber-600 text-base sm:text-lg mt-1">${totalInteresPendiente.toFixed(2)}</p>
+            <div className={`p-4 rounded-2xl border text-center ${isDark ? 'bg-gray-950/60 border-gray-800/80' : 'bg-gray-50 border-gray-200'}`}>
+              <p className={`font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Interés Pendiente</p>
+              <p className="font-black text-amber-500 text-base sm:text-lg mt-1">${totalInteresPendiente.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-center">
-              <p className="text-gray-500 font-medium text-xs">En Mora</p>
-              <p className="font-black text-red-600 text-base sm:text-lg mt-1">${totalInteresAtrasado.toFixed(2)}</p>
+            <div className={`p-4 rounded-2xl border text-center ${isDark ? 'bg-gray-950/60 border-gray-800/80' : 'bg-gray-50 border-gray-200'}`}>
+              <p className={`font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>En Mora</p>
+              <p className="font-black text-red-500 text-base sm:text-lg mt-1">${totalInteresAtrasado.toFixed(2)}</p>
             </div>
           </div>
         </div>
 
         {/* VISTAS DE TABS */}
         <main>
-          {loading && <p className="text-center text-gray-500 py-12 text-sm font-medium">Cargando información...</p>}
+          {loading && <p className="text-center text-gray-400 py-12 text-sm font-medium">Cargando información...</p>}
 
           {!loading && activeTab === 'dashboard' && (
-            <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
-              <h2 className="text-base font-bold text-gray-900">Préstamos Activos</h2>
-              <div className="divide-y divide-gray-100">
+            <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+              <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Préstamos Activos</h2>
+              <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                 {prestamos.map((p) => {
                   const est = getEstadoCliente(p.cliente_id);
                   return (
                     <div 
                       key={p.id} 
                       onClick={() => setClienteExpediente(p.clientes)}
-                      className="py-4 flex justify-between items-center text-xs cursor-pointer hover:bg-gray-50 p-2 rounded-2xl transition"
+                      className={`py-4 flex justify-between items-center text-xs cursor-pointer p-2 rounded-2xl transition ${isDark ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}
                     >
                       <div>
-                        <p className="font-bold text-gray-900 text-sm">{p.clientes?.nombre_completo || 'N/A'}</p>
-                        <p className="text-gray-500 mt-0.5">Cédula: {p.clientes?.cedula || 'N/A'}</p>
+                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.clientes?.nombre_completo || 'N/A'}</p>
+                        <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {p.clientes?.cedula || 'N/A'}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-blue-600 text-sm">${Number(p.capital_pendiente).toFixed(2)}</p>
+                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-blue-600'}`}>${Number(p.capital_pendiente).toFixed(2)}</p>
                         <span className={`inline-block mt-1 px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
                           {est.label}
                         </span>
@@ -910,22 +892,22 @@ export default function Home() {
                     </div>
                   );
                 })}
-                {prestamos.length === 0 && <p className="text-gray-400 py-6 text-xs text-center">No hay préstamos activos registrados en tu cartera.</p>}
+                {prestamos.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">No hay préstamos activos registrados en tu cartera.</p>}
               </div>
             </div>
           )}
 
           {!loading && activeTab === 'clientes' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
+              <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                 <div className="flex justify-between items-center">
-                  <h2 className="text-base font-bold text-gray-900">
+                  <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     {clienteEditar ? 'Editar Datos del Cliente' : 'Registrar Nuevo Cliente'}
                   </h2>
                   {clienteEditar && (
                     <button
                       onClick={() => setClienteEditar(null)}
-                      className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-xl hover:bg-gray-200 transition"
+                      className="text-xs bg-gray-800 text-gray-300 px-3 py-1 rounded-xl hover:bg-gray-700 transition"
                     >
                       Cancelar Edición
                     </button>
@@ -934,7 +916,7 @@ export default function Home() {
 
                 <form onSubmit={handleGuardarCliente} className="space-y-3.5 text-xs">
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Nombre Completo *</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nombre Completo *</label>
                     <input 
                       type="text" 
                       value={clienteEditar ? clienteEditar.nombre_completo : nuevoCliente.nombre_completo} 
@@ -945,7 +927,7 @@ export default function Home() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-semibold text-gray-700 mb-1">Cédula *</label>
+                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Cédula *</label>
                       <input 
                         type="text" 
                         value={clienteEditar ? clienteEditar.cedula : nuevoCliente.cedula} 
@@ -955,7 +937,7 @@ export default function Home() {
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-gray-700 mb-1">Teléfono *</label>
+                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Teléfono *</label>
                       <input 
                         type="text" 
                         value={clienteEditar ? clienteEditar.telefono : nuevoCliente.telefono} 
@@ -966,7 +948,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Dirección</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dirección</label>
                     <input 
                       type="text" 
                       value={clienteEditar ? clienteEditar.direccion : nuevoCliente.direccion} 
@@ -975,15 +957,15 @@ export default function Home() {
                       placeholder="Panamá"
                     />
                   </div>
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
                     {clienteEditar ? 'Guardar Cambios' : 'Guardar Cliente'}
                   </button>
                 </form>
               </div>
 
-              <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
-                <h2 className="text-base font-bold text-gray-900">Directorio de Clientes ({clientes.length})</h2>
-                <div className="divide-y divide-gray-100">
+              <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Directorio de Clientes ({clientes.length})</h2>
+                <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                   {clientes.map(c => {
                     const est = getEstadoCliente(c.id);
                     return (
@@ -992,8 +974,8 @@ export default function Home() {
                           onClick={() => setClienteExpediente(c)}
                           className="cursor-pointer hover:underline"
                         >
-                          <p className="font-bold text-gray-900 text-sm">{c.nombre_completo}</p>
-                          <p className="text-gray-500 mt-0.5">Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
+                          <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.nombre_completo}</p>
+                          <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
@@ -1001,13 +983,17 @@ export default function Home() {
                           </span>
                           <button 
                             onClick={() => setClienteEditar(c)}
-                            className="text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-2xl font-bold text-[11px] transition hover:bg-blue-100"
+                            className={`px-2.5 py-1 rounded-2xl font-bold text-[11px] transition border ${
+                              isDark ? 'text-blue-400 bg-blue-950/80 border-blue-800/80 hover:bg-blue-900' : 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100'
+                            }`}
                           >
                             Editar
                           </button>
                           <button 
                             onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
-                            className="text-red-600 hover:text-red-800 bg-red-50 border border-red-200 px-2.5 py-1 rounded-2xl font-bold text-[11px] transition hover:bg-red-100"
+                            className={`px-2.5 py-1 rounded-2xl font-bold text-[11px] transition border ${
+                              isDark ? 'text-red-400 bg-red-950/80 border-red-800/80 hover:bg-red-900' : 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100'
+                            }`}
                           >
                             Eliminar
                           </button>
@@ -1015,18 +1001,18 @@ export default function Home() {
                       </div>
                     );
                   })}
-                  {clientes.length === 0 && <p className="text-gray-400 py-6 text-xs text-center">Aún no has agregado ningún cliente.</p>}
+                  {clientes.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">Aún no has agregado ningún cliente.</p>}
                 </div>
               </div>
             </div>
           )}
 
           {!loading && activeTab === 'prestamos' && (
-            <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
-              <h2 className="text-base font-bold text-gray-900">Nuevo Préstamo</h2>
+            <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+              <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Nuevo Préstamo</h2>
               <form onSubmit={handleCrearPrestamo} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Cliente *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Cliente *</label>
                   <select 
                     value={nuevoPrestamo.cliente_id} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, cliente_id: e.target.value})}
@@ -1041,7 +1027,7 @@ export default function Home() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Monto ($) *</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Monto ($) *</label>
                     <input 
                       type="number" 
                       value={nuevoPrestamo.monto_original} 
@@ -1051,7 +1037,7 @@ export default function Home() {
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Tasa Quincenal (%) *</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Tasa Quincenal (%) *</label>
                     <input 
                       type="number" 
                       value={nuevoPrestamo.tasa_quincenal} 
@@ -1063,7 +1049,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Esquema Cobro *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Esquema Cobro *</label>
                   <select 
                     value={nuevoPrestamo.esquema_cobro} 
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, esquema_cobro: e.target.value})}
@@ -1076,7 +1062,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Fecha Desembolso (dd/mm/aaaa) *</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Desembolso (dd/mm/aaaa) *</label>
                   <div className="grid grid-cols-3 gap-2">
                     <input 
                       type="number" 
@@ -1106,7 +1092,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
                   Generar Préstamo
                 </button>
               </form>
@@ -1115,11 +1101,11 @@ export default function Home() {
 
           {!loading && activeTab === 'pagos' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
-                <h2 className="text-base font-bold text-gray-900">Registrar Cobro</h2>
+              <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Registrar Cobro</h2>
                 <form onSubmit={handleRegistrarPago} className="space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Préstamo Activo *</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Préstamo Activo *</label>
                     <select 
                       value={nuevoPago.prestamo_id} 
                       onChange={e => setNuevoPago({...nuevoPago, prestamo_id: e.target.value})}
@@ -1136,7 +1122,7 @@ export default function Home() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-semibold text-gray-700 mb-1">Monto ($) *</label>
+                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Monto ($) *</label>
                       <input 
                         type="number" 
                         value={nuevoPago.monto_total} 
@@ -1146,7 +1132,7 @@ export default function Home() {
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-gray-700 mb-1">Método de Pago *</label>
+                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Método de Pago *</label>
                       <select 
                         value={nuevoPago.metodo_pago} 
                         onChange={e => setNuevoPago({...nuevoPago, metodo_pago: e.target.value})}
@@ -1159,7 +1145,7 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
                     <div className="grid grid-cols-3 gap-2">
                       <input 
                         type="number" 
@@ -1189,31 +1175,33 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition shadow-lg">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-lg">
                     Procesar Cobro
                   </button>
                 </form>
               </div>
 
-              <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-4 shadow-sm">
-                <h2 className="text-base font-bold text-gray-900">Historial de Cobros</h2>
-                <div className="divide-y divide-gray-100">
+              <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Historial de Cobros</h2>
+                <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                   {pagos.map((p) => (
                     <div key={p.id} className="py-3 flex justify-between items-center text-xs">
                       <div>
-                        <p className="font-bold text-gray-900 text-sm">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
-                        <p className="text-gray-500 mt-0.5">{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
+                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
+                        <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <p className="font-bold text-emerald-600 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
-                          <p className="text-[10px] text-gray-500 mt-0.5">
-                            (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-300 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
+                          <p className="font-bold text-emerald-500 text-sm">+${Number(p.monto_total).toFixed(2)}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            (Int: ${Number(p.aplicado_interes).toFixed(2)} <span className="text-gray-500 px-1 font-bold">|</span> Cap: ${Number(p.aplicado_capital).toFixed(2)})
                           </p>
                         </div>
                         <button
                           onClick={() => enviarComprobanteWhatsApp(p)}
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 p-2 rounded-2xl font-bold text-xs transition"
+                          className={`p-2 rounded-2xl font-bold text-xs transition border ${
+                            isDark ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80 hover:bg-emerald-900' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
                           title="Enviar Recibo por WhatsApp"
                         >
                           📲 WhatsApp
@@ -1221,48 +1209,50 @@ export default function Home() {
                       </div>
                     </div>
                   ))}
-                  {pagos.length === 0 && <p className="text-gray-400 py-6 text-xs text-center">Aún no hay cobros registrados.</p>}
+                  {pagos.length === 0 && <p className="text-gray-500 py-6 text-xs text-center">Aún no hay cobros registrados.</p>}
                 </div>
               </div>
             </div>
           )}
 
           {!loading && activeTab === 'csv' && (
-            <div className="bg-white rounded-3xl p-6 border border-gray-200 space-y-5 shadow-sm">
+            <div className={`rounded-3xl p-6 border space-y-5 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                  <h2 className="text-base font-bold text-gray-900">Cargar Cartera e Historial Masivo</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">Importa tus préstamos existentes desde Excel en segundos.</p>
+                  <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cargar Cartera e Historial Masivo</h2>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Importa tus préstamos existentes desde Excel en segundos.</p>
                 </div>
                 <button
                   onClick={descargarPlantillaCSV}
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3.5 py-2 rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shrink-0"
+                  className={`px-3.5 py-2 rounded-2xl font-bold text-xs transition flex items-center gap-1.5 shrink-0 border ${
+                    isDark ? 'bg-blue-950/80 text-blue-400 border-blue-800/80 hover:bg-blue-900' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
+                  }`}
                 >
                   📥 Descargar Plantilla .CSV
                 </button>
               </div>
 
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-xs space-y-3">
+              <div className={`border rounded-2xl p-4 text-xs space-y-3 ${isDark ? 'bg-gray-950/60 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
                 <div className="flex justify-between items-center">
-                  <p className="font-bold text-blue-600 uppercase tracking-wider text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
+                  <p className="font-bold text-blue-500 uppercase tracking-wide text-[11px]">Guía Rápida para Cargar tu Cartera:</p>
                   <button 
                     onClick={() => {
                       setTutorialSeccion('csv');
                       setMostrarTutorial(true);
                     }}
-                    className="text-[10px] text-blue-600 hover:underline font-bold"
+                    className="text-[10px] text-blue-500 hover:underline font-bold"
                   >
                     Ver Tutorial Completo ➔
                   </button>
                 </div>
-                <ol className="list-decimal list-inside space-y-1.5 text-gray-700 leading-relaxed">
+                <ol className={`list-decimal list-inside space-y-1.5 leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   <li>Haz clic en <strong>Descargar Plantilla .CSV</strong> arriba y ábrela en Excel o Google Sheets.</li>
                   <li>Llena tus clientes. Si un mismo cliente tiene <strong>varios préstamos o pagos</strong>, usa su misma <strong>Cédula</strong> en varias filas.</li>
                   <li>Copia las filas desde Excel, pégalas en el cajón de abajo y presiona <strong>Procesar Cartera</strong>.</li>
                 </ol>
-                <div className="pt-2 border-t border-gray-200 text-[11px] text-gray-500">
-                  <span className="font-semibold text-gray-700">Formato de Columnas:</span>
-                  <code className="bg-white border border-gray-200 px-2 py-1 rounded-xl text-gray-800 block mt-1 overflow-x-auto font-mono">
+                <div className={`pt-2 border-t text-[11px] ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+                  <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Formato de Columnas:</span>
+                  <code className={`px-2 py-1 rounded-xl block mt-1 overflow-x-auto font-mono border ${isDark ? 'bg-gray-900 border-gray-800 text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`}>
                     Nombre, Cédula, Teléfono, Dirección, MontoPréstamo, TasaQuincenal(%), FechaInicio(AAAA-MM-DD), MontoPago, FechaPago(AAAA-MM-DD)
                   </code>
                 </div>
@@ -1276,7 +1266,7 @@ export default function Home() {
                   placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Juan Perez, 8-888-8888, 6666-6666, Panama, , , 2026-02-15, 50.00, 2026-02-15&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon, 1000.00, 5, 2026-02-01, ,"
                   className={fieldInputStyle}
                 />
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
                   Procesar y Cargar Cartera
                 </button>
               </form>
@@ -1284,28 +1274,56 @@ export default function Home() {
           )}
         </main>
 
+        {/* PIE DE PÁGINA CON SELECTOR DE TEMA Y CERRAR SESIÓN (SIN SOLAPARSE) */}
+        <footer className={`flex flex-col sm:flex-row justify-between items-center gap-4 p-4 rounded-3xl border text-xs ${isDark ? 'bg-gray-900 border-gray-800 text-gray-400' : 'bg-white border-gray-200 text-gray-600'}`}>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Tema:</span>
+            <div className={`p-1 rounded-xl border flex gap-1 ${isDark ? 'bg-gray-950 border-gray-800' : 'bg-gray-100 border-gray-200'}`}>
+              {(['dark', 'light', 'system'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  className={`px-2.5 py-1 rounded-lg font-bold capitalize transition ${
+                    theme === t 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'hover:text-blue-500'
+                  }`}
+                >
+                  {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '💻 System'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={handleSignOut}
+            className="text-xs bg-red-950/80 hover:bg-red-900 text-red-400 border border-red-800/80 px-4 py-2 rounded-2xl font-bold transition flex items-center gap-1.5 shadow-sm"
+          >
+            🔒 Cerrar Sesión
+          </button>
+        </footer>
+
       </div>
 
-      {/* MODAL DE TUTORIALES Y GUÍA DE USO SIN SCROLL DE PESTAÑAS */}
+      {/* MODAL DE TUTORIALES Y GUÍA DE USO */}
       {mostrarTutorial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-gray-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className={`border w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
             
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+            <div className={`flex justify-between items-center border-b pb-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               <div className="flex items-center gap-2">
-                <PrestaoLogo className="w-6 h-6" />
-                <h3 className="text-base font-bold text-gray-900">Centro de Ayuda Prestao</h3>
+                <img src="/logo.png" alt="Prestao" className="w-6 h-6 object-contain" />
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Centro de Ayuda Prestao</h3>
               </div>
               <button 
                 onClick={() => setMostrarTutorial(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-base p-1"
+                className="text-gray-400 hover:text-gray-200 font-bold text-base p-1"
               >
                 ✕
               </button>
             </div>
 
-            {/* CUADRÍCULA DE NAVEGACIÓN (2X2 SIN SCROLL) */}
-            <div className="grid grid-cols-2 gap-2 border-b border-gray-100 pb-3">
+            <div className={`grid grid-cols-2 gap-2 border-b pb-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               {[
                 { id: 'general', label: '1. General' },
                 { id: 'csv', label: '2. Cargar Cartera' },
@@ -1316,7 +1334,7 @@ export default function Home() {
                   key={sec.id}
                   onClick={() => setTutorialSeccion(sec.id as any)}
                   className={`py-2 px-3 rounded-2xl font-bold text-center text-xs transition border ${
-                    tutorialSeccion === sec.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    tutorialSeccion === sec.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : isDark ? 'bg-gray-950 text-gray-400 border-gray-800 hover:bg-gray-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                   }`}
                 >
                   {sec.label}
@@ -1324,11 +1342,10 @@ export default function Home() {
               ))}
             </div>
 
-            {/* CONTENIDO DEL TUTORIAL */}
-            <div className="space-y-3 leading-relaxed text-gray-700">
+            <div className={`space-y-3 leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
               {tutorialSeccion === 'general' && (
                 <>
-                  <h4 className="font-bold text-gray-900 text-sm">💡 ¿Cómo funciona Prestao?</h4>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>💡 ¿Cómo funciona Prestao?</h4>
                   <p>Prestao administra tus créditos personales separando clientes, préstamos y abonos de forma automatizada.</p>
                   <ul className="list-disc list-inside space-y-1 pl-1">
                     <li><strong>Dashboard:</strong> Muestra el capital colocado, pendiente y montos en mora.</li>
@@ -1341,7 +1358,7 @@ export default function Home() {
 
               {tutorialSeccion === 'csv' && (
                 <>
-                  <h4 className="font-bold text-gray-900 text-sm">📥 Guía de Carga Masiva desde Excel</h4>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>📥 Guía de Carga Masiva desde Excel</h4>
                   <p>Si ya tienes una libreta o Excel con préstamos actuales, impórtala fácilmente:</p>
                   <ol className="list-decimal list-inside space-y-1.5 pl-1">
                     <li>Entra a <strong>Cargar Cartera</strong> y presiona <strong>Descargar Plantilla .CSV</strong>.</li>
@@ -1354,7 +1371,7 @@ export default function Home() {
 
               {tutorialSeccion === 'interes' && (
                 <>
-                  <h4 className="font-bold text-gray-900 text-sm">🧮 Motor Financiero y Saldo Insoluto</h4>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>🧮 Motor Financiero y Saldo Insoluto</h4>
                   <p>Prestao calcula los intereses sobre el <strong>Capital Restante (Saldo Insoluto)</strong>:</p>
                   <ul className="list-disc list-inside space-y-1 pl-1">
                     <li>Si la deuda es de $1,000 al 10% quincenal, la cuota de interés es $100.</li>
@@ -1366,13 +1383,13 @@ export default function Home() {
 
               {tutorialSeccion === 'pwa' && (
                 <>
-                  <h4 className="font-bold text-gray-900 text-sm">📲 Cómo Instalar Prestao como App en tu Pantalla de Inicio</h4>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>📲 Cómo Instalar Prestao como App en tu Pantalla de Inicio</h4>
                   <p>Conviértela en una WebApp sin descargarla de las tiendas oficiales:</p>
                   <div className="space-y-2 pt-1">
-                    <p className="font-bold text-blue-600">En iPhone (Safari):</p>
+                    <p className="font-bold text-blue-500">En iPhone (Safari):</p>
                     <p className="pl-2">Toca el botón <strong>Compartir</strong> (icono del cuadro con la flecha arriba) en la parte inferior de Safari y selecciona <strong>"Agregar a inicio"</strong> ➕.</p>
                     
-                    <p className="font-bold text-blue-600">En Android (Chrome):</p>
+                    <p className="font-bold text-blue-500">En Android (Chrome):</p>
                     <p className="pl-2">Toca los <strong>3 puntos</strong> de la esquina superior derecha y selecciona <strong>"Instalar aplicación"</strong> o <strong>"Agregar a la pantalla principal"</strong> 📲.</p>
                   </div>
                 </>
@@ -1381,7 +1398,7 @@ export default function Home() {
 
             <button
               onClick={() => setMostrarTutorial(false)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl transition mt-4"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl transition mt-4"
             >
               Cerrar Ayuda
             </button>
@@ -1392,69 +1409,69 @@ export default function Home() {
 
       {/* EXPEDIENTE DIGITAL DE CLIENTE */}
       {clienteExpediente && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-gray-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className={`border w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 text-xs max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
             
-            <div className="flex justify-between items-start border-b border-gray-100 pb-3">
+            <div className={`flex justify-between items-start border-b pb-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               <div>
-                <h3 className="text-base font-bold text-gray-900">{clienteExpediente.nombre_completo}</h3>
-                <p className="text-gray-500 mt-0.5">Cédula: {clienteExpediente.cedula} | Teléfono: {clienteExpediente.telefono}</p>
-                <p className="text-gray-500 mt-0.5">Dirección: {clienteExpediente.direccion || 'Panamá'}</p>
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{clienteExpediente.nombre_completo}</h3>
+                <p className="text-gray-400 mt-0.5">Cédula: {clienteExpediente.cedula} | Teléfono: {clienteExpediente.telefono}</p>
+                <p className="text-gray-400 mt-0.5">Dirección: {clienteExpediente.direccion || 'Panamá'}</p>
               </div>
               <button 
                 onClick={() => setClienteExpediente(null)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-base p-1"
+                className="text-gray-400 hover:text-gray-200 font-bold text-base p-1"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3">
-              <h4 className="font-bold text-blue-600 uppercase tracking-wider">Préstamos Registrados</h4>
+              <h4 className="font-bold text-blue-500 uppercase tracking-wide">Préstamos Registrados</h4>
               <div className="space-y-2">
                 {prestamos.filter(p => p.cliente_id === clienteExpediente.id).map(p => (
-                  <div key={p.id} className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-1">
-                    <div className="flex justify-between font-bold text-gray-900">
+                  <div key={p.id} className={`p-3 rounded-2xl border space-y-1 ${isDark ? 'bg-gray-950/80 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+                    <div className={`flex justify-between font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                       <span>Monto Original: ${Number(p.monto_original).toFixed(2)}</span>
-                      <span className={p.estado === 'activo' ? 'text-amber-600' : 'text-emerald-600'}>
+                      <span className={p.estado === 'activo' ? 'text-amber-500' : 'text-emerald-500'}>
                         {p.estado === 'activo' ? `Pendiente: $${Number(p.capital_pendiente).toFixed(2)}` : 'CANCELADO'}
                       </span>
                     </div>
-                    <p className="text-gray-500 text-[11px]">
+                    <p className="text-gray-400 text-[11px]">
                       Tasa: {p.tasa_quincenal}% Quincenal | Inicio: {new Date(p.fecha_inicio).toLocaleDateString('es-PA')} | Esquema: {p.esquema_cobro}
                     </p>
                   </div>
                 ))}
                 {prestamos.filter(p => p.cliente_id === clienteExpediente.id).length === 0 && (
-                  <p className="text-gray-400 italic">Este cliente no tiene préstamos registrados.</p>
+                  <p className="text-gray-500 italic">Este cliente no tiene préstamos registrados.</p>
                 )}
               </div>
             </div>
 
             <div className="space-y-3 pt-2">
-              <h4 className="font-bold text-blue-600 uppercase tracking-wider">Historial de Abonos</h4>
-              <div className="divide-y divide-gray-100 bg-gray-50 rounded-2xl border border-gray-200 p-3">
+              <h4 className="font-bold text-blue-500 uppercase tracking-wide">Historial de Abonos</h4>
+              <div className={`divide-y rounded-2xl border p-3 ${isDark ? 'divide-gray-800 bg-gray-950/80 border-gray-800' : 'divide-gray-100 bg-gray-50 border-gray-200'}`}>
                 {pagos.filter(p => p.prestamos?.cliente_id === clienteExpediente.id).map(p => (
                   <div key={p.id} className="py-2 flex justify-between items-center">
                     <div>
-                      <p className="font-semibold text-gray-900">{new Date(p.fecha_pago).toLocaleDateString('es-PA')}</p>
-                      <p className="text-gray-500 text-[10px]">{p.notas}</p>
+                      <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{new Date(p.fecha_pago).toLocaleDateString('es-PA')}</p>
+                      <p className="text-gray-400 text-[10px]">{p.notas}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-emerald-600">+${Number(p.monto_total).toFixed(2)}</p>
+                      <p className="font-bold text-emerald-500">+${Number(p.monto_total).toFixed(2)}</p>
                       <p className="text-[10px] text-gray-500">Int: ${Number(p.aplicado_interes).toFixed(2)} | Cap: ${Number(p.aplicado_capital).toFixed(2)}</p>
                     </div>
                   </div>
                 ))}
                 {pagos.filter(p => p.prestamos?.cliente_id === clienteExpediente.id).length === 0 && (
-                  <p className="text-gray-400 italic text-center py-2">No hay abonos registrados para este cliente.</p>
+                  <p className="text-gray-500 italic text-center py-2">No hay abonos registrados para este cliente.</p>
                 )}
               </div>
             </div>
 
             <button
               onClick={() => setClienteExpediente(null)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-2xl transition"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl transition"
             >
               Cerrar Expediente
             </button>
@@ -1465,19 +1482,19 @@ export default function Home() {
 
       {/* MODAL PWA GENERAL */}
       {modalConfig.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-gray-200 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className={`border w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
             
             <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-lg font-bold">
-              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-50 text-red-600 border border-red-200 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
-              {modalConfig.tipo === 'exito' && <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 w-full h-full rounded-2xl flex items-center justify-center">✓</span>}
-              {modalConfig.tipo === 'error' && <span className="bg-red-50 text-red-600 border border-red-200 w-full h-full rounded-2xl flex items-center justify-center">✕</span>}
-              {modalConfig.tipo === 'alerta' && <span className="bg-blue-50 text-blue-600 border border-blue-200 w-full h-full rounded-2xl flex items-center justify-center">ℹ</span>}
+              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
+              {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-2xl flex items-center justify-center">✓</span>}
+              {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">✕</span>}
+              {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-2xl flex items-center justify-center">ℹ</span>}
             </div>
 
             <div>
-              <h3 className="text-base font-bold text-gray-900">{modalConfig.titulo}</h3>
-              <p className="text-xs text-gray-600 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
+              <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{modalConfig.titulo}</h3>
+              <p className={`text-xs mt-2 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{modalConfig.mensaje}</p>
             </div>
 
             <div className="flex gap-2 pt-2 text-xs font-semibold">
@@ -1485,7 +1502,7 @@ export default function Home() {
                 <>
                   <button
                     onClick={cerrarModal}
-                    className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl transition"
+                    className={`w-1/2 py-3 rounded-2xl transition ${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
                     Cancelar
                   </button>
@@ -1494,7 +1511,7 @@ export default function Home() {
                       cerrarModal();
                       if (modalConfig.onAceptar) modalConfig.onAceptar();
                     }}
-                    className="w-1/2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl transition shadow-md"
+                    className="w-1/2 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-2xl transition shadow-md"
                   >
                     Confirmar
                   </button>
@@ -1502,7 +1519,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={cerrarModal}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl transition shadow-md font-bold text-xs"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-2xl transition shadow-md font-bold text-xs"
                 >
                   Entendido
                 </button>
