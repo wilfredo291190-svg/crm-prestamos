@@ -235,7 +235,7 @@ export default function Home() {
 
   function getEstadoCliente(clienteId: string) {
     const prestamosCliente = prestamos.filter(p => p.cliente_id === clienteId && p.estado === 'activo');
-    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' };
+    if (prestamosCliente.length === 0) return { label: 'Sin Deuda', color: 'bg-emerald-950/80 text-emerald-400 border-emerald-800' };
 
     const hoyStr = new Date().toISOString().split('T')[0];
     let tieneMora = false;
@@ -248,8 +248,8 @@ export default function Home() {
       }
     }
 
-    if (tieneMora) return { label: 'En Mora', color: 'bg-red-900/40 text-red-400 border-red-800' };
-    return { label: 'Al Día', color: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' };
+    if (tieneMora) return { label: 'En Mora', color: 'bg-red-950/80 text-red-400 border-red-800' };
+    return { label: 'Al Día', color: 'bg-emerald-950/80 text-emerald-400 border-emerald-800' };
   }
 
   function formatearTelefono(val: string) {
@@ -431,7 +431,17 @@ export default function Home() {
     .filter(q => q.interes_pendiente > 0 && q.fecha_limite_gracia < hoyStr)
     .reduce((acc, curr) => acc + Number(curr.interes_pendiente || 0), 0);
 
-  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+  // ESTÁNDAR GLOBAL DE INPUTS (HOMOGÉNEO ROUNDED-2XL)
+  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+
+  // NOMBRES DE PESTAÑAS
+  const tabNames: Record<string, string> = {
+    dashboard: 'Dashboard',
+    clientes: 'Clientes',
+    prestamos: 'Préstamos',
+    pagos: 'Cobros',
+    csv: 'CSV'
+  };
 
   if (authLoading) {
     return (
@@ -458,7 +468,7 @@ export default function Home() {
           }
         `}</style>
         
-        <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
+        <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-6">
           
           <div className="text-center space-y-2">
             <div className="w-14 h-14 mx-auto bg-gray-950 rounded-2xl border border-gray-800 p-2.5 flex items-center justify-center shadow-lg">
@@ -481,7 +491,7 @@ export default function Home() {
                     value={regUsername} 
                     onChange={e => setRegUsername(e.target.value)}
                     className={fieldInputStyle}
-                    placeholder="ej: wilfredo29"
+                    placeholder="Ej: wilfredo29"
                     required
                   />
                 </div>
@@ -562,7 +572,7 @@ export default function Home() {
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-sm text-center tracking-wide"
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-bold py-3.5 rounded-2xl transition shadow-lg text-sm text-center tracking-wide"
             >
               {isSubmitting ? 'Procesando...' : isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}
             </button>
@@ -584,13 +594,13 @@ export default function Home() {
 
         {modalConfig.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+            <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 text-center">
               
-              <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
-                {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
-                {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
-                {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">✕</span>}
-                {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-full flex items-center justify-center">ℹ</span>}
+              <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-lg font-bold">
+                {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
+                {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-2xl flex items-center justify-center">✓</span>}
+                {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">✕</span>}
+                {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-2xl flex items-center justify-center">ℹ</span>}
               </div>
 
               <div>
@@ -600,7 +610,7 @@ export default function Home() {
 
               <button
                 onClick={cerrarModal}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-xl transition shadow-md font-bold text-xs"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-2xl transition shadow-md font-bold text-xs"
               >
                 Entendido
               </button>
@@ -634,11 +644,11 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* ENCABEZADO SIMÉTRICO HOMOGÉNEO */}
+        {/* HEADER HOMOGÉNEO (BORDER RADIUS ROUNDED-2XL PARA TODOS) */}
         <header className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gray-950 border border-gray-800 p-1.5 flex items-center justify-center shadow-md shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-gray-950 border border-gray-800 p-1.5 flex items-center justify-center shadow-md shrink-0">
                 <svg viewBox="0 0 100 100" className="w-full h-full">
                   <path d="M 15 85 V 15 C 15 10, 20 5, 28 5 H 38 C 46 5, 52 10, 52 15 V 35 L 70 20 C 76 15, 85 17, 89 23 C 93 29, 91 38, 85 42 L 52 65 V 85 C 52 90, 46 95, 38 95 H 28 C 20 95, 15 90, 15 85 Z" fill="#1D4ED8"/>
                   <path d="M 45 10 C 72 10, 95 24, 95 50 C 95 72, 75 88, 52 88 L 38 88 L 52 74 C 68 74, 78 63, 78 50 C 78 36, 64 26, 45 26 H 36 V 10 Z" fill="#38BDF8"/>
@@ -652,70 +662,71 @@ export default function Home() {
             
             <button 
               onClick={handleSignOut}
-              className="sm:hidden text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-3 py-2 rounded-xl font-bold transition shrink-0 h-10 flex items-center justify-center"
+              className="sm:hidden text-xs bg-red-950/80 hover:bg-red-900 text-red-400 border border-red-800/80 px-3 py-2 rounded-2xl font-bold transition shrink-0 h-10 flex items-center justify-center shadow-sm"
             >
-              Salir
+              Cerrar Sesión
             </button>
           </div>
 
+          {/* BARRA DE NAVEGACIÓN SIMÉTRICA HOMOGÉNEA */}
           <nav className="w-full sm:w-auto flex flex-wrap sm:flex-nowrap bg-gray-950 p-1.5 rounded-2xl border border-gray-800 gap-1.5 justify-center">
             {(['dashboard', 'clientes', 'prestamos', 'pagos', 'csv'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => cambiarPestana(tab)}
-                className={`flex-1 sm:flex-none py-2.5 px-3 text-center rounded-xl transition font-bold text-xs whitespace-nowrap min-w-[70px] h-10 flex items-center justify-center ${
+                className={`flex-1 sm:flex-none py-2.5 px-3 text-center rounded-2xl transition font-bold text-xs whitespace-nowrap min-w-[70px] h-10 flex items-center justify-center ${
                   activeTab === tab 
                     ? 'bg-blue-600 text-white shadow-md' 
                     : 'text-gray-400 hover:text-white hover:bg-gray-900'
                 }`}
               >
-                {tab === 'pagos' ? 'Cobros' : tab === 'csv' ? 'CSV' : tab}
+                {tabNames[tab]}
               </button>
             ))}
           </nav>
 
           <button 
             onClick={handleSignOut}
-            className="hidden sm:flex text-xs bg-red-950/50 hover:bg-red-900/80 text-red-400 border border-red-800/50 px-4 py-2.5 rounded-xl font-bold transition shrink-0 h-10 items-center justify-center"
+            className="hidden sm:flex text-xs bg-red-950/80 hover:bg-red-900 text-red-400 border border-red-800/80 px-4 py-2.5 rounded-2xl font-bold transition shrink-0 h-10 items-center justify-center shadow-sm"
           >
-            Salir
+            Cerrar Sesión
           </button>
         </header>
 
-        {/* METRICAS PRINCIPALES */}
-        <div className="bg-gray-900 border border-gray-800 text-white rounded-3xl p-6 shadow-xl space-y-6">
-          <div className="flex justify-between items-start">
+        {/* TARJETA DE MÉTRICAS SIMÉTRICA Y HOMOGÉNEA (MOBILE FRIENDLY) */}
+        <div className="bg-gray-900 border border-gray-800 text-white rounded-2xl p-6 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <p className="text-xs text-gray-400 font-medium">Capital Activo Pendiente</p>
-              <p className="text-3xl font-black mt-1 text-white">${totalCapitalPendiente.toFixed(2)}</p>
+              <p className="text-xs text-gray-400 font-semibold tracking-wide">Capital Activo Pendiente</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1 text-white">${totalCapitalPendiente.toFixed(2)}</p>
             </div>
-            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-3.5 py-1.5 rounded-full font-bold border border-emerald-500/30">
+            <div className="self-start sm:self-center bg-emerald-950/80 text-emerald-400 text-xs px-4 py-2 rounded-2xl font-bold border border-emerald-800/80 shadow-sm">
               ${totalInteresCobrado.toFixed(2)} Cobrado
-            </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-800 text-xs">
-            <div>
-              <p className="text-gray-400">Total Colocado</p>
-              <p className="font-bold text-gray-200 mt-0.5">${totalCapitalColocado.toFixed(2)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-gray-800 text-xs">
+            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
+              <p className="text-gray-400 font-medium">Total Prestado</p>
+              <p className="font-bold text-gray-200 text-sm mt-0.5">${totalCapitalColocado.toFixed(2)}</p>
             </div>
-            <div>
-              <p className="text-gray-400">Interés Pendiente</p>
-              <p className="font-bold text-yellow-400 mt-0.5">${totalInteresPendiente.toFixed(2)}</p>
+            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
+              <p className="text-gray-400 font-medium">Interés Pendiente</p>
+              <p className="font-bold text-yellow-400 text-sm mt-0.5">${totalInteresPendiente.toFixed(2)}</p>
             </div>
-            <div>
-              <p className="text-gray-400">En Mora</p>
-              <p className="font-bold text-red-400 mt-0.5">${totalInteresAtrasado.toFixed(2)}</p>
+            <div className="bg-gray-950/50 p-3 rounded-2xl border border-gray-800/60">
+              <p className="text-gray-400 font-medium">En Mora</p>
+              <p className="font-bold text-red-400 text-sm mt-0.5">${totalInteresAtrasado.toFixed(2)}</p>
             </div>
           </div>
         </div>
 
-        {/* SECCIONES */}
+        {/* VISTAS DE TABS */}
         <main>
           {loading && <p className="text-center text-gray-400 py-12 text-sm font-medium">Cargando información...</p>}
 
           {!loading && activeTab === 'dashboard' && (
-            <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
               <h2 className="text-base font-bold text-white">Préstamos Activos</h2>
               <div className="divide-y divide-gray-800">
                 {prestamos.map((p) => {
@@ -728,7 +739,7 @@ export default function Home() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-white text-sm">${Number(p.capital_pendiente).toFixed(2)}</p>
-                        <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${est.color}`}>
+                        <span className={`inline-block mt-1 px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
                           {est.label}
                         </span>
                       </div>
@@ -742,7 +753,7 @@ export default function Home() {
 
           {!loading && activeTab === 'clientes' && (
             <div className="space-y-6">
-              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
                 <h2 className="text-base font-bold text-white">Registrar Nuevo Cliente</h2>
                 <form onSubmit={handleCrearCliente} className="space-y-3.5 text-xs">
                   <div>
@@ -787,13 +798,13 @@ export default function Home() {
                       placeholder="Panamá"
                     />
                   </div>
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
                     Guardar Cliente
                   </button>
                 </form>
               </div>
 
-              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
                 <h2 className="text-base font-bold text-white">Directorio de Clientes ({clientes.length})</h2>
                 <div className="divide-y divide-gray-800">
                   {clientes.map(c => {
@@ -801,18 +812,18 @@ export default function Home() {
                     return (
                       <div key={c.id} className="py-3 flex justify-between items-center text-xs">
                         <div>
-                          <p className="font-bold text-white">{c.nombre_completo}</p>
+                          <p className="font-bold text-white text-sm">{c.nombre_completo}</p>
                           <p className="text-gray-400 mt-0.5">Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${est.color}`}>
+                          <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
                             {est.label}
                           </span>
                           <button 
                             onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
-                            className="text-red-400 hover:text-red-300 bg-red-950/50 border border-red-800/50 px-2.5 py-1 rounded-lg font-bold text-[10px] transition hover:bg-red-900/80"
+                            className="text-red-400 hover:text-red-300 bg-red-950/80 border border-red-800/80 px-3 py-1.5 rounded-2xl font-bold text-[11px] transition hover:bg-red-900"
                           >
-                            Borrar
+                            Eliminar
                           </button>
                         </div>
                       </div>
@@ -825,7 +836,7 @@ export default function Home() {
           )}
 
           {!loading && activeTab === 'prestamos' && (
-            <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
               <h2 className="text-base font-bold text-white">Nuevo Préstamo</h2>
               <form onSubmit={handleCrearPrestamo} className="space-y-3.5 text-xs">
                 <div>
@@ -909,7 +920,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition mt-2 shadow-md">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
                   Generar Préstamo
                 </button>
               </form>
@@ -918,7 +929,7 @@ export default function Home() {
 
           {!loading && activeTab === 'pagos' && (
             <div className="space-y-6">
-              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
                 <h2 className="text-base font-bold text-white">Registrar Cobro</h2>
                 <form onSubmit={handleRegistrarPago} className="space-y-4 text-xs">
                   <div>
@@ -992,19 +1003,19 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-lg">
                     Procesar Cobro
                   </button>
                 </form>
               </div>
 
-              <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
                 <h2 className="text-base font-bold text-white">Historial de Cobros</h2>
                 <div className="divide-y divide-gray-800">
                   {pagos.map((p) => (
                     <div key={p.id} className="py-3 flex justify-between items-center text-xs">
                       <div>
-                        <p className="font-bold text-white">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
+                        <p className="font-bold text-white text-sm">{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
                         <p className="text-gray-400 mt-0.5">{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
                       </div>
                       <div className="text-right">
@@ -1022,7 +1033,7 @@ export default function Home() {
           )}
 
           {!loading && activeTab === 'csv' && (
-            <div className="bg-gray-900 rounded-3xl p-6 border border-gray-800 space-y-4 shadow-md">
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 space-y-4 shadow-md">
               <h2 className="text-base font-bold text-white">Importación Masiva de Clientes (CSV)</h2>
               <p className="text-xs text-gray-400">
                 Pega la lista desde Excel en formato separado por comas:
@@ -1039,7 +1050,7 @@ export default function Home() {
                   placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon"
                   className={fieldInputStyle}
                 />
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition shadow-md">
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
                   Cargar Lista de Clientes
                 </button>
               </form>
@@ -1049,15 +1060,16 @@ export default function Home() {
 
       </div>
 
+      {/* MODAL PWA */}
       {modalConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 text-center">
             
-            <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center text-lg font-bold">
-              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">⚠️</span>}
-              {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-full flex items-center justify-center">✓</span>}
-              {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-full flex items-center justify-center">✕</span>}
-              {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-full flex items-center justify-center">ℹ</span>}
+            <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-lg font-bold">
+              {modalConfig.tipo === 'confirmacion' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">⚠️</span>}
+              {modalConfig.tipo === 'exito' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 w-full h-full rounded-2xl flex items-center justify-center">✓</span>}
+              {modalConfig.tipo === 'error' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 w-full h-full rounded-2xl flex items-center justify-center">✕</span>}
+              {modalConfig.tipo === 'alerta' && <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 w-full h-full rounded-2xl flex items-center justify-center">ℹ</span>}
             </div>
 
             <div>
@@ -1065,12 +1077,34 @@ export default function Home() {
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">{modalConfig.mensaje}</p>
             </div>
 
-            <button
-              onClick={cerrarModal}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-xl transition shadow-md font-bold text-xs"
-            >
-              Entendido
-            </button>
+            <div className="flex gap-2 pt-2 text-xs font-semibold">
+              {modalConfig.tipo === 'confirmacion' ? (
+                <>
+                  <button
+                    onClick={cerrarModal}
+                    className="w-1/2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-2xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      cerrarModal();
+                      if (modalConfig.onAceptar) modalConfig.onAceptar();
+                    }}
+                    className="w-1/2 bg-red-600 hover:bg-red-500 text-white py-3 rounded-2xl transition shadow-md"
+                  >
+                    Confirmar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={cerrarModal}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3.5 rounded-2xl transition shadow-md font-bold text-xs"
+                >
+                  Entendido
+                </button>
+              )}
+            </div>
 
           </div>
         </div>
