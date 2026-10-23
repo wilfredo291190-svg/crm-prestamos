@@ -11,11 +11,29 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 function formatearFechaEspanol(fechaStr: string) {
   if (!fechaStr) return 'N/A';
   const cleanDate = fechaStr.split('T')[0];
-  const partes = cleanDate.split('-');
+  const partes = cleanDate.split(/[-/]/);
   if (partes.length === 3) {
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    if (partes[0].length === 4) {
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+    return `${partes[0]}/${partes[1]}/${partes[2]}`;
   }
   return fechaStr;
+}
+
+// Convertidor de cualquier formato de fecha a ISO (AAAA-MM-DD) para Supabase
+function normalizarFechaISO(fechaInput: string) {
+  if (!fechaInput) return new Date().toISOString().split('T')[0];
+  const partes = fechaInput.trim().split(/[-/]/);
+  if (partes.length === 3) {
+    if (partes[0].length === 4) {
+      return `${partes[0]}-${partes[1].padStart(2, '0')}-${partes[2].padStart(2, '0')}`;
+    }
+    if (partes[2].length === 4) {
+      return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+    }
+  }
+  return fechaInput;
 }
 
 export default function Home() {
@@ -49,7 +67,7 @@ export default function Home() {
   const [quincenas, setQuincenas] = useState<any[]>([]);
   const [pagos, setPagos] = useState<any[]>([]);
 
-  // Formularios CRM con Fecha Seleccionable (Default hoy AAAA-MM-DD)
+  // Formularios CRM
   const hoyISO = new Date().toISOString().split('T')[0];
   
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
@@ -289,7 +307,6 @@ export default function Home() {
     return { label: 'Al Día', color: effectiveTheme === 'dark' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-300' };
   }
 
-  // Sanitizador estricto de teléfono en Panamá (solo 8 dígitos numéricos)
   function limpiarTelefonoPanama(val: string) {
     return val.replace(/\D/g, '').slice(0, 8);
   }
@@ -361,9 +378,9 @@ export default function Home() {
 
   function descargarPlantillaCSV() {
     const plantilla = "Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha\n" +
-      "Juan Perez,8-888-8888,66666666,Panama,500.00,10,2026-01-15,50.00,2026-01-30\n" +
-      "Juan Perez,8-888-8888,66666666,Panama,,,2026-02-15,50.00,2026-02-15\n" +
-      "Maria Gomez,3-333-3333,65555555,Colon,1000.00,5,2026-02-01,,";
+      "Juan Perez,8-888-8888,66666666,Panama,500.00,10,15/01/2026,50.00,30/01/2026\n" +
+      "Juan Perez,8-888-8888,66666666,Panama,,,15/02/2026,50.00,15/02/2026\n" +
+      "Maria Gomez,3-333-3333,65555555,Colon,1000.00,5,01/02/2026,,";
 
     const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -396,9 +413,9 @@ export default function Home() {
         const direccion = col[3]?.trim() || 'Panamá';
         const montoPrestamo = col[4]?.trim() ? parseFloat(col[4].trim()) : 0;
         const tasaQuincenal = col[5]?.trim() ? parseFloat(col[5].trim()) : 10;
-        const fechaInicio = col[6]?.trim() || new Date().toISOString().split('T')[0];
+        const fechaInicio = normalizarFechaISO(col[6]?.trim() || '');
         const pagoMonto = col[7]?.trim() ? parseFloat(col[7].trim()) : 0;
-        const pagoFecha = col[8]?.trim() || new Date().toISOString().split('T')[0];
+        const pagoFecha = normalizarFechaISO(col[8]?.trim() || '');
 
         if (cedula) {
           let clienteId = null;
@@ -526,7 +543,6 @@ export default function Home() {
     }
   }
 
-  // Envío del Comprobante por WhatsApp con Saldo Restante Calculado Exacto
   function enviarComprobanteWhatsApp(pago: any, saldoRestanteCalculado?: number) {
     const clienteNombre = pago.prestamos?.clientes?.nombre_completo || 'Cliente';
     const telefonoRaw = pago.prestamos?.clientes?.telefono || '';
@@ -878,9 +894,9 @@ export default function Home() {
 
           {!loading && activeTab === 'dashboard' && (
             <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-              <div className="flex justify-between items-center">
-                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Préstamos Activos</h2>
-                <span className="text-[11px] text-gray-400 font-semibold">Toca cualquier cliente para ver su Expediente 📂</span>
+              <div className="border-b pb-3 border-gray-800/60">
+                <h2 className={`text-base font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>Préstamos Activos</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5 font-medium">Toca la carpeta 📂 para ver el Expediente del cliente</p>
               </div>
 
               <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
@@ -890,21 +906,26 @@ export default function Home() {
                     <div 
                       key={p.id} 
                       onClick={() => setClienteExpediente(p.clientes)}
-                      className={`py-4 flex justify-between items-center text-xs cursor-pointer p-2.5 rounded-2xl transition border border-transparent ${
+                      className={`py-4 flex flex-col gap-3 cursor-pointer p-3 rounded-2xl transition border border-transparent ${
                         isDark ? 'hover:bg-gray-800/60 hover:border-gray-700' : 'hover:bg-blue-50/50 hover:border-blue-100'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-lg">📂</span>
-                        <div>
-                          <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.clientes?.nombre_completo || 'N/A'}</p>
-                          <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {p.clientes?.cedula || 'N/A'} | Tel: +507 {p.clientes?.telefono}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xl bg-blue-500/10 p-2 rounded-2xl border border-blue-500/20" title="Ver Expediente Digital">📂</span>
+                          <div>
+                            <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.clientes?.nombre_completo || 'N/A'}</p>
+                            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {p.clientes?.cedula || 'N/A'} | Tel: +507 {p.clientes?.telefono}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <p className={`font-black text-base ${isDark ? 'text-white' : 'text-blue-600'}`}>${Number(p.capital_pendiente).toFixed(2)}</p>
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-blue-600'}`}>${Number(p.capital_pendiente).toFixed(2)}</p>
-                        <span className={`inline-block mt-1 px-3 py-1 rounded-2xl text-[10px] font-bold border shrink-0 whitespace-nowrap ${est.color}`}>
+                      <div className="flex justify-end pt-1">
+                        <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border whitespace-nowrap ${est.color}`}>
                           {est.label}
                         </span>
                       </div>
@@ -997,47 +1018,50 @@ export default function Home() {
               </div>
 
               <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                <div className="flex justify-between items-center">
-                  <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Directorio de Clientes ({clientes.length})</h2>
-                  <span className="text-[11px] text-gray-400 font-semibold">Toca la carpeta 📂 para abrir expediente</span>
+                <div className="border-b pb-3 border-gray-800/60">
+                  <h2 className={`text-base font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>Directorio de Clientes ({clientes.length})</h2>
+                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">Toca la carpeta 📂 para abrir el expediente completo</p>
                 </div>
 
                 <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                   {clientes.map(c => {
                     const est = getEstadoCliente(c.id);
                     return (
-                      <div key={c.id} className="py-3.5 flex justify-between items-center text-xs">
+                      <div key={c.id} className="py-4 space-y-3">
                         <div 
                           onClick={() => setClienteExpediente(c)}
-                          className="cursor-pointer hover:opacity-80 transition flex items-center gap-2.5"
+                          className="cursor-pointer hover:opacity-80 transition flex items-center gap-3"
                         >
-                          <span className="text-xl bg-blue-500/10 p-2 rounded-2xl border border-blue-500/20" title="Ver Expediente Digital">📂</span>
+                          <span className="text-xl bg-blue-500/10 p-2.5 rounded-2xl border border-blue-500/20 shrink-0" title="Ver Expediente Digital">📂</span>
                           <div>
                             <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.nombre_completo}</p>
-                            <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {c.cedula || 'N/A'} | Tel: +507 {c.telefono}</p>
+                            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {c.cedula || 'N/A'} | Tel: +507 {c.telefono}</p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border shrink-0 whitespace-nowrap ${est.color}`}>
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border whitespace-nowrap ${est.color}`}>
                             {est.label}
                           </span>
-                          <button 
-                            onClick={() => setClienteEditar(c)}
-                            className={`px-2.5 py-1 rounded-2xl font-bold text-[11px] transition border ${
-                              isDark ? 'text-blue-400 bg-blue-950/80 border-blue-800/80 hover:bg-blue-900' : 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100'
-                            }`}
-                          >
-                            Editar
-                          </button>
-                          <button 
-                            onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
-                            className={`px-2.5 py-1 rounded-2xl font-bold text-[11px] transition border ${
-                              isDark ? 'text-red-400 bg-red-950/80 border-red-800/80 hover:bg-red-900' : 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100'
-                            }`}
-                          >
-                            Eliminar
-                          </button>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => setClienteEditar(c)}
+                              className={`px-3 py-1.5 rounded-2xl font-bold text-xs transition border ${
+                                isDark ? 'text-blue-400 bg-blue-950/80 border-blue-800/80 hover:bg-blue-900' : 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100'
+                              }`}
+                            >
+                              Editar
+                            </button>
+                            <button 
+                              onClick={() => handleBorrarCliente(c.id, c.nombre_completo)}
+                              className={`px-3 py-1.5 rounded-2xl font-bold text-xs transition border ${
+                                isDark ? 'text-red-400 bg-red-950/80 border-red-800/80 hover:bg-red-900' : 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100'
+                              }`}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1110,7 +1134,7 @@ export default function Home() {
                     onChange={e => setNuevoPrestamo({...nuevoPrestamo, fecha_inicio: e.target.value})}
                     className={fieldInputStyle}
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">Formato visual de pantalla: DD/MM/AAAA</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Formato: DD/MM/AAAA (Selección por calendario desplegable)</p>
                 </div>
 
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
@@ -1253,7 +1277,7 @@ export default function Home() {
                 <div className={`pt-2 border-t text-[11px] ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
                   <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Formato de Columnas:</span>
                   <code className={`px-2 py-1 rounded-xl block mt-1 overflow-x-auto font-mono border ${isDark ? 'bg-gray-900 border-gray-800 text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`}>
-                    Nombre, Cédula, Teléfono, Dirección, MontoPréstamo, TasaQuincenal(%), FechaInicio(AAAA-MM-DD), MontoPago, FechaPago(AAAA-MM-DD)
+                    Nombre, Cédula, Teléfono, Dirección, MontoPréstamo, TasaQuincenal(%), FechaInicio(DD/MM/AAAA), MontoPago, FechaPago(DD/MM/AAAA)
                   </code>
                 </div>
               </div>
@@ -1263,7 +1287,7 @@ export default function Home() {
                   rows={7}
                   value={csvTexto}
                   onChange={e => setCsvTexto(e.target.value)}
-                  placeholder="Juan Perez, 8-888-8888, 66666666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Juan Perez, 8-888-8888, 66666666, Panama, , , 2026-02-15, 50.00, 2026-02-15&#10;Maria Gomez, 3-333-3333, 65555555, Colon, 1000.00, 5, 2026-02-01, ,"
+                  placeholder="Juan Perez, 8-888-8888, 66666666, Panama, 500.00, 10, 15/01/2026, 50.00, 30/01/2026&#10;Juan Perez, 8-888-8888, 66666666, Panama, , , 15/02/2026, 50.00, 15/02/2026&#10;Maria Gomez, 3-333-3333, 65555555, Colon, 1000.00, 5, 01/02/2026, ,"
                   className={fieldInputStyle}
                 />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
