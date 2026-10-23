@@ -7,6 +7,17 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Formateador universal de fechas a DD/MM/AAAA
+function formatearFechaEspanol(fechaStr: string) {
+  if (!fechaStr) return 'N/A';
+  const cleanDate = fechaStr.split('T')[0];
+  const partes = cleanDate.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+  return fechaStr;
+}
+
 export default function Home() {
   // Estado de Sesión y Autenticación
   const [session, setSession] = useState<any>(null);
@@ -38,7 +49,9 @@ export default function Home() {
   const [quincenas, setQuincenas] = useState<any[]>([]);
   const [pagos, setPagos] = useState<any[]>([]);
 
-  // Formularios CRM
+  // Formularios CRM con Fecha Seleccionable (Default hoy AAAA-MM-DD)
+  const hoyISO = new Date().toISOString().split('T')[0];
+  
   const [nuevoCliente, setNuevoCliente] = useState({ nombre_completo: '', cedula: '', telefono: '', direccion: '' });
   const [clienteEditar, setClienteEditar] = useState<any>(null);
   
@@ -47,18 +60,16 @@ export default function Home() {
     monto_original: '', 
     tasa_quincenal: '', 
     esquema_cobro: '15_30', 
-    dia: '', 
-    mes: '', 
-    anio: new Date().getFullYear().toString() 
+    fecha_inicio: hoyISO
   });
+
   const [nuevoPago, setNuevoPago] = useState({ 
     prestamo_id: '', 
     monto_total: '', 
     metodo_pago: 'Yappy', 
-    dia: '', 
-    mes: '', 
-    anio: new Date().getFullYear().toString() 
+    fecha_pago: hoyISO
   });
+
   const [csvTexto, setCsvTexto] = useState('');
 
   // EXPEDIENTE DIGITAL Y TUTORIALES
@@ -278,10 +289,9 @@ export default function Home() {
     return { label: 'Al Día', color: effectiveTheme === 'dark' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-300' };
   }
 
-  function formatearTelefono(val: string) {
-    const num = val.replace(/\D/g, '');
-    if (num.length <= 4) return num;
-    return `${num.slice(0, 4)}-${num.slice(4, 8)}`;
+  // Sanitizador estricto de teléfono en Panamá (solo 8 dígitos numéricos)
+  function limpiarTelefonoPanama(val: string) {
+    return val.replace(/\D/g, '').slice(0, 8);
   }
 
   async function handleGuardarCliente(e: React.FormEvent) {
@@ -292,13 +302,19 @@ export default function Home() {
       return mostrarAlerta('Campos Requeridos', 'Por favor ingresa Nombre, Cédula y Teléfono.', 'alerta');
     }
 
+    const telLimpio = limpiarTelefonoPanama(clienteData.telefono);
+
+    if (telLimpio.length < 8) {
+      return mostrarAlerta('Teléfono Inválido', 'El teléfono celular debe contener exactamente 8 dígitos numéricos.', 'alerta');
+    }
+
     if (clienteEditar) {
       const { error } = await supabase
         .from('clientes')
         .update({
           nombre_completo: clienteEditar.nombre_completo,
           cedula: clienteEditar.cedula,
-          telefono: formatearTelefono(clienteEditar.telefono),
+          telefono: telLimpio,
           direccion: clienteEditar.direccion
         })
         .eq('id', clienteEditar.id);
@@ -314,7 +330,7 @@ export default function Home() {
       const { error } = await supabase.from('clientes').insert([{
         ...nuevoCliente,
         user_id: session?.user?.id,
-        telefono: formatearTelefono(nuevoCliente.telefono)
+        telefono: telLimpio
       }]);
 
       if (error) {
@@ -345,9 +361,9 @@ export default function Home() {
 
   function descargarPlantillaCSV() {
     const plantilla = "Nombre,Cedula,Telefono,Direccion,MontoPrestamo,TasaQuincenal,FechaInicio,PagoMonto,PagoFecha\n" +
-      "Juan Perez,8-888-8888,6666-6666,Panama,500.00,10,2026-01-15,50.00,2026-01-30\n" +
-      "Juan Perez,8-888-8888,6666-6666,Panama,,,2026-02-15,50.00,2026-02-15\n" +
-      "Maria Gomez,3-333-3333,6555-5555,Colon,1000.00,5,2026-02-01,,";
+      "Juan Perez,8-888-8888,66666666,Panama,500.00,10,2026-01-15,50.00,2026-01-30\n" +
+      "Juan Perez,8-888-8888,66666666,Panama,,,2026-02-15,50.00,2026-02-15\n" +
+      "Maria Gomez,3-333-3333,65555555,Colon,1000.00,5,2026-02-01,,";
 
     const blob = new Blob([plantilla], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -376,7 +392,7 @@ export default function Home() {
       if (col.length >= 3) {
         const nombre = col[0]?.trim();
         const cedula = col[1]?.trim();
-        const telefono = col[2]?.trim();
+        const telefono = limpiarTelefonoPanama(col[2]?.trim() || '');
         const direccion = col[3]?.trim() || 'Panamá';
         const montoPrestamo = col[4]?.trim() ? parseFloat(col[4].trim()) : 0;
         const tasaQuincenal = col[5]?.trim() ? parseFloat(col[5].trim()) : 10;
@@ -400,7 +416,7 @@ export default function Home() {
               user_id: session?.user?.id,
               nombre_completo: nombre,
               cedula: cedula,
-              telefono: formatearTelefono(telefono),
+              telefono: telefono,
               direccion: direccion
             }]).select().single();
 
@@ -486,13 +502,9 @@ export default function Home() {
     const monto = parseFloat(nuevoPrestamo.monto_original);
     const tasa = parseFloat(nuevoPrestamo.tasa_quincenal);
 
-    if (!nuevoPrestamo.cliente_id || !monto || isNaN(tasa) || !nuevoPrestamo.dia || !nuevoPrestamo.mes || !nuevoPrestamo.anio) {
-      return mostrarAlerta('Formulario Incompleto', 'Por favor ingresa todos los datos del préstamo incluyendo la fecha en formato dd/mm/aaaa.', 'alerta');
+    if (!nuevoPrestamo.cliente_id || !monto || isNaN(tasa) || !nuevoPrestamo.fecha_inicio) {
+      return mostrarAlerta('Formulario Incompleto', 'Por favor ingresa todos los datos del préstamo incluyendo la fecha.', 'alerta');
     }
-
-    const diaPadded = nuevoPrestamo.dia.padStart(2, '0');
-    const mesPadded = nuevoPrestamo.mes.padStart(2, '0');
-    const fechaISO = `${nuevoPrestamo.anio}-${mesPadded}-${diaPadded}`;
 
     const { error } = await supabase.from('prestamos').insert([{
       user_id: session?.user?.id,
@@ -501,33 +513,38 @@ export default function Home() {
       capital_pendiente: monto,
       tasa_quincenal: tasa,
       esquema_cobro: nuevoPrestamo.esquema_cobro,
-      fecha_inicio: fechaISO,
+      fecha_inicio: nuevoPrestamo.fecha_inicio,
       estado: 'activo'
     }]);
 
     if (error) {
       mostrarAlerta('Error', 'No se pudo generar el préstamo: ' + error.message, 'error');
     } else {
-      setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '', esquema_cobro: '15_30', dia: '', mes: '', anio: new Date().getFullYear().toString() });
+      setNuevoPrestamo({ cliente_id: '', monto_original: '', tasa_quincenal: '', esquema_cobro: '15_30', fecha_inicio: hoyISO });
       cargarDatos();
       mostrarAlerta('Préstamo Generado', 'El crédito quedó registrado exitosamente.', 'exito');
     }
   }
 
-  function enviarComprobanteWhatsApp(pago: any) {
+  // Envío del Comprobante por WhatsApp con Saldo Restante Calculado Exacto
+  function enviarComprobanteWhatsApp(pago: any, saldoRestanteCalculado?: number) {
     const clienteNombre = pago.prestamos?.clientes?.nombre_completo || 'Cliente';
     const telefonoRaw = pago.prestamos?.clientes?.telefono || '';
-    const numLimpio = '507' + telefonoRaw.replace(/\D/g, '');
+    const numLimpio = '507' + limpiarTelefonoPanama(telefonoRaw);
+
+    const saldoFinal = saldoRestanteCalculado !== undefined 
+      ? saldoRestanteCalculado 
+      : Number(pago.prestamos?.capital_pendiente || 0);
 
     const mensaje = `*RECIBO DE PAGO - PRESTAO*\n\n` +
       `👤 *Cliente:* ${clienteNombre}\n` +
       `💵 *Monto Abonado:* $${Number(pago.monto_total).toFixed(2)}\n` +
-      `📅 *Fecha:* ${new Date(pago.fecha_pago).toLocaleDateString('es-PA')}\n` +
+      `📅 *Fecha:* ${formatearFechaEspanol(pago.fecha_pago)}\n` +
       `💳 *Método:* ${pago.notas}\n\n` +
       `Desglose del Abono:\n` +
       `• A Interés: $${Number(pago.aplicado_interes).toFixed(2)}\n` +
       `• A Capital: $${Number(pago.aplicado_capital).toFixed(2)}\n\n` +
-      `*Saldo Restante:* $${Number(pago.prestamos?.capital_pendiente || 0).toFixed(2)}\n\n` +
+      `*Saldo Capital Restante:* $${saldoFinal.toFixed(2)}\n\n` +
       `¡Gracias por tu pago puntual!`;
 
     const url = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
@@ -541,13 +558,7 @@ export default function Home() {
 
     if (!prestamo || !montoAbonado) return mostrarAlerta('Selección Requerida', 'Selecciona un préstamo e ingresa un monto válido.', 'alerta');
 
-    let fechaPagoEval = new Date();
-    if (nuevoPago.dia && nuevoPago.mes && nuevoPago.anio) {
-      const diaPadded = nuevoPago.dia.padStart(2, '0');
-      const mesPadded = nuevoPago.mes.padStart(2, '0');
-      fechaPagoEval = new Date(`${nuevoPago.anio}-${mesPadded}-${diaPadded}`);
-    }
-
+    const fechaPagoEval = new Date(nuevoPago.fecha_pago);
     const fechaInicio = new Date(prestamo.fecha_inicio);
     const diasDiferencia = Math.max(1, Math.floor((fechaPagoEval.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24)));
     const quincenasTranscurridas = Math.max(1, Math.ceil(diasDiferencia / 15));
@@ -568,7 +579,7 @@ export default function Home() {
       monto_total: montoAbonado,
       aplicado_interes: aplicadoInteres,
       aplicado_capital: aplicadoCapital,
-      fecha_pago: fechaPagoEval.toISOString().split('T')[0],
+      fecha_pago: nuevoPago.fecha_pago,
       notas: `Método: ${nuevoPago.metodo_pago}`
     };
 
@@ -584,14 +595,14 @@ export default function Home() {
       estado: nuevoEstado
     }).eq('id', prestamo.id);
 
-    setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', dia: '', mes: '', anio: new Date().getFullYear().toString() });
+    setNuevoPago({ prestamo_id: '', monto_total: '', metodo_pago: 'Yappy', fecha_pago: hoyISO });
     cargarDatos();
 
     mostrarConfirmacion(
       'Cobro Exitoso - ¿Enviar Comprobante?',
-      `Abonado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. ¿Deseas enviar el recibo por WhatsApp al cliente?`,
+      `Abonado: $${aplicadoInteres.toFixed(2)} a Interés | $${aplicadoCapital.toFixed(2)} a Capital. Saldo Restante: $${nuevoCapitalPendiente.toFixed(2)}. ¿Deseas enviar el recibo por WhatsApp al cliente?`,
       () => {
-        if (dataPago) enviarComprobanteWhatsApp(dataPago);
+        if (dataPago) enviarComprobanteWhatsApp(dataPago, nuevoCapitalPendiente);
       }
     );
   }
@@ -867,7 +878,11 @@ export default function Home() {
 
           {!loading && activeTab === 'dashboard' && (
             <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-              <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Préstamos Activos</h2>
+              <div className="flex justify-between items-center">
+                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Préstamos Activos</h2>
+                <span className="text-[11px] text-gray-400 font-semibold">Toca cualquier cliente para ver su Expediente 📂</span>
+              </div>
+
               <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                 {prestamos.map((p) => {
                   const est = getEstadoCliente(p.cliente_id);
@@ -875,15 +890,21 @@ export default function Home() {
                     <div 
                       key={p.id} 
                       onClick={() => setClienteExpediente(p.clientes)}
-                      className={`py-4 flex justify-between items-center text-xs cursor-pointer p-2 rounded-2xl transition ${isDark ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}
+                      className={`py-4 flex justify-between items-center text-xs cursor-pointer p-2.5 rounded-2xl transition border border-transparent ${
+                        isDark ? 'hover:bg-gray-800/60 hover:border-gray-700' : 'hover:bg-blue-50/50 hover:border-blue-100'
+                      }`}
                     >
-                      <div>
-                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.clientes?.nombre_completo || 'N/A'}</p>
-                        <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {p.clientes?.cedula || 'N/A'}</p>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">📂</span>
+                        <div>
+                          <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.clientes?.nombre_completo || 'N/A'}</p>
+                          <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {p.clientes?.cedula || 'N/A'} | Tel: +507 {p.clientes?.telefono}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
+
+                      <div className="text-right shrink-0">
                         <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-blue-600'}`}>${Number(p.capital_pendiente).toFixed(2)}</p>
-                        <span className={`inline-block mt-1 px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
+                        <span className={`inline-block mt-1 px-3 py-1 rounded-2xl text-[10px] font-bold border shrink-0 whitespace-nowrap ${est.color}`}>
                           {est.label}
                         </span>
                       </div>
@@ -923,6 +944,7 @@ export default function Home() {
                       placeholder="Juan Pérez"
                     />
                   </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Cédula *</label>
@@ -934,17 +956,29 @@ export default function Home() {
                         placeholder="8-888-8888"
                       />
                     </div>
+
                     <div>
-                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Teléfono *</label>
-                      <input 
-                        type="text" 
-                        value={clienteEditar ? clienteEditar.telefono : nuevoCliente.telefono} 
-                        onChange={e => clienteEditar ? setClienteEditar({...clienteEditar, telefono: e.target.value}) : setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
-                        className={fieldInputStyle}
-                        placeholder="6666-6666"
-                      />
+                      <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Teléfono Celular (Panamá) *</label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3.5 text-xs font-black text-gray-500 select-none z-10 flex items-center gap-1">
+                          🇵🇦 +507
+                        </span>
+                        <input 
+                          type="tel" 
+                          maxLength={8}
+                          value={clienteEditar ? clienteEditar.telefono : nuevoCliente.telefono} 
+                          onChange={e => {
+                            const val = limpiarTelefonoPanama(e.target.value);
+                            clienteEditar ? setClienteEditar({...clienteEditar, telefono: val}) : setNuevoCliente({...nuevoCliente, telefono: val});
+                          }}
+                          className={`${fieldInputStyle} pl-20`}
+                          placeholder="66666666"
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">Ingresa únicamente los 8 dígitos (sin guiones).</p>
                     </div>
                   </div>
+
                   <div>
                     <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Dirección</label>
                     <input 
@@ -955,6 +989,7 @@ export default function Home() {
                       placeholder="Panamá"
                     />
                   </div>
+
                   <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
                     {clienteEditar ? 'Guardar Cambios' : 'Guardar Cliente'}
                   </button>
@@ -962,21 +997,29 @@ export default function Home() {
               </div>
 
               <div className={`rounded-3xl p-6 border space-y-4 shadow-md ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Directorio de Clientes ({clientes.length})</h2>
+                <div className="flex justify-between items-center">
+                  <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Directorio de Clientes ({clientes.length})</h2>
+                  <span className="text-[11px] text-gray-400 font-semibold">Toca la carpeta 📂 para abrir expediente</span>
+                </div>
+
                 <div className={`divide-y ${isDark ? 'divide-gray-800' : 'divide-gray-100'}`}>
                   {clientes.map(c => {
                     const est = getEstadoCliente(c.id);
                     return (
-                      <div key={c.id} className="py-3 flex justify-between items-center text-xs">
+                      <div key={c.id} className="py-3.5 flex justify-between items-center text-xs">
                         <div 
                           onClick={() => setClienteExpediente(c)}
-                          className="cursor-pointer hover:underline"
+                          className="cursor-pointer hover:opacity-80 transition flex items-center gap-2.5"
                         >
-                          <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.nombre_completo}</p>
-                          <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {c.cedula || 'N/A'} | Tel: {c.telefono}</p>
+                          <span className="text-xl bg-blue-500/10 p-2 rounded-2xl border border-blue-500/20" title="Ver Expediente Digital">📂</span>
+                          <div>
+                            <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.nombre_completo}</p>
+                            <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cédula: {c.cedula || 'N/A'} | Tel: +507 {c.telefono}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border ${est.color}`}>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`px-3 py-1 rounded-2xl text-[10px] font-bold border shrink-0 whitespace-nowrap ${est.color}`}>
                             {est.label}
                           </span>
                           <button 
@@ -1060,34 +1103,14 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Desembolso (dd/mm/aaaa) *</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="31"
-                      value={nuevoPrestamo.dia} 
-                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, dia: e.target.value})}
-                      className={fieldInputStyle}
-                      placeholder="DD"
-                    />
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="12"
-                      value={nuevoPrestamo.mes} 
-                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, mes: e.target.value})}
-                      className={fieldInputStyle}
-                      placeholder="MM"
-                    />
-                    <input 
-                      type="number" 
-                      value={nuevoPrestamo.anio} 
-                      onChange={e => setNuevoPrestamo({...nuevoPrestamo, anio: e.target.value})}
-                      className={fieldInputStyle}
-                      placeholder="AAAA"
-                    />
-                  </div>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Desembolso *</label>
+                  <input 
+                    type="date" 
+                    value={nuevoPrestamo.fecha_inicio} 
+                    onChange={e => setNuevoPrestamo({...nuevoPrestamo, fecha_inicio: e.target.value})}
+                    className={fieldInputStyle}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Formato visual de pantalla: DD/MM/AAAA</p>
                 </div>
 
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition mt-2 shadow-md">
@@ -1143,34 +1166,13 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Real de Pago (Opcional: dd/mm/aaaa)</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input 
-                        type="number" 
-                        min="1" 
-                        max="31"
-                        value={nuevoPago.dia} 
-                        onChange={e => setNuevoPago({...nuevoPago, dia: e.target.value})}
-                        className={fieldInputStyle}
-                        placeholder="DD"
-                      />
-                      <input 
-                        type="number" 
-                        min="1" 
-                        max="12"
-                        value={nuevoPago.mes} 
-                        onChange={e => setNuevoPago({...nuevoPago, mes: e.target.value})}
-                        className={fieldInputStyle}
-                        placeholder="MM"
-                      />
-                      <input 
-                        type="number" 
-                        value={nuevoPago.anio} 
-                        onChange={e => setNuevoPago({...nuevoPago, anio: e.target.value})}
-                        className={fieldInputStyle}
-                        placeholder="AAAA"
-                      />
-                    </div>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Fecha Real de Pago *</label>
+                    <input 
+                      type="date" 
+                      value={nuevoPago.fecha_pago} 
+                      onChange={e => setNuevoPago({...nuevoPago, fecha_pago: e.target.value})}
+                      className={fieldInputStyle}
+                    />
                   </div>
 
                   <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-lg">
@@ -1186,7 +1188,7 @@ export default function Home() {
                     <div key={p.id} className="py-3 flex justify-between items-center text-xs">
                       <div>
                         <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.prestamos?.clientes?.nombre_completo || 'N/A'}</p>
-                        <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{new Date(p.fecha_pago).toLocaleDateString('es-PA')} | {p.notas}</p>
+                        <p className={`mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{formatearFechaEspanol(p.fecha_pago)} | {p.notas}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
@@ -1261,7 +1263,7 @@ export default function Home() {
                   rows={7}
                   value={csvTexto}
                   onChange={e => setCsvTexto(e.target.value)}
-                  placeholder="Juan Perez, 8-888-8888, 6666-6666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Juan Perez, 8-888-8888, 6666-6666, Panama, , , 2026-02-15, 50.00, 2026-02-15&#10;Maria Gomez, 3-333-3333, 6555-5555, Colon, 1000.00, 5, 2026-02-01, ,"
+                  placeholder="Juan Perez, 8-888-8888, 66666666, Panama, 500.00, 10, 2026-01-15, 50.00, 2026-01-30&#10;Juan Perez, 8-888-8888, 66666666, Panama, , , 2026-02-15, 50.00, 2026-02-15&#10;Maria Gomez, 3-333-3333, 65555555, Colon, 1000.00, 5, 2026-02-01, ,"
                   className={fieldInputStyle}
                 />
                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-2xl transition shadow-md">
@@ -1347,7 +1349,7 @@ export default function Home() {
                   <p>Prestao administra tus créditos personales separando clientes, préstamos y abonos de forma automatizada.</p>
                   <ul className="list-disc list-inside space-y-1 pl-1">
                     <li><strong>Dashboard:</strong> Muestra el capital colocado, pendiente y montos en mora.</li>
-                    <li><strong>Clientes:</strong> Ficha de clientes con su expediente e historial completo al tocar su nombre.</li>
+                    <li><strong>Clientes:</strong> Ficha de clientes con su expediente e historial completo al tocar la carpeta 📂.</li>
                     <li><strong>Préstamos:</strong> Registra nuevos préstamos con tasa quincenal.</li>
                     <li><strong>Cobros:</strong> Liquida automáticamente intereses acumulados y amortiza a capital.</li>
                   </ul>
@@ -1413,7 +1415,7 @@ export default function Home() {
             <div className={`flex justify-between items-start border-b pb-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
               <div>
                 <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{clienteExpediente.nombre_completo}</h3>
-                <p className="text-gray-400 mt-0.5">Cédula: {clienteExpediente.cedula} | Teléfono: {clienteExpediente.telefono}</p>
+                <p className="text-gray-400 mt-0.5">Cédula: {clienteExpediente.cedula} | Teléfono: +507 {clienteExpediente.telefono}</p>
                 <p className="text-gray-400 mt-0.5">Dirección: {clienteExpediente.direccion || 'Panamá'}</p>
               </div>
               <button 
@@ -1436,7 +1438,7 @@ export default function Home() {
                       </span>
                     </div>
                     <p className="text-gray-400 text-[11px]">
-                      Tasa: {p.tasa_quincenal}% Quincenal | Inicio: {new Date(p.fecha_inicio).toLocaleDateString('es-PA')} | Esquema: {p.esquema_cobro}
+                      Tasa: {p.tasa_quincenal}% Quincenal | Inicio: {formatearFechaEspanol(p.fecha_inicio)} | Esquema: {p.esquema_cobro}
                     </p>
                   </div>
                 ))}
@@ -1452,7 +1454,7 @@ export default function Home() {
                 {pagos.filter(p => p.prestamos?.cliente_id === clienteExpediente.id).map(p => (
                   <div key={p.id} className="py-2 flex justify-between items-center">
                     <div>
-                      <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{new Date(p.fecha_pago).toLocaleDateString('es-PA')}</p>
+                      <p className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{formatearFechaEspanol(p.fecha_pago)}</p>
                       <p className="text-gray-400 text-[10px]">{p.notas}</p>
                     </div>
                     <div className="text-right">
