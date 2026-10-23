@@ -609,9 +609,7 @@ export default function Home() {
 
   const isDark = effectiveTheme === 'dark';
 
-  const fieldInputStyle = isDark
-    ? "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-    : "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
+  const fieldInputStyle = "w-full bg-white text-black font-extrabold text-sm border border-gray-300 rounded-2xl p-3.5 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all";
 
   const tabNames: Record<string, string> = {
     dashboard: 'Dashboard',
@@ -650,7 +648,7 @@ export default function Home() {
           
           <div className="text-center space-y-2">
             <div className="w-16 h-16 mx-auto flex items-center justify-center">
-              <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" onError={(e: any) => { e.target.onerror = null; e.target.src = 'https://raw.githubusercontent.com/wilfredo291190-svg/crm-prestamos/main/public/logo.png'; }} />
+              <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-blue-500">Prestao</h1>
             <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gestor de Microcréditos</p>
@@ -793,12 +791,12 @@ export default function Home() {
 
       <div className="max-w-3xl mx-auto space-y-6 min-h-[85vh]">
         
-        {/* ENCABEZADO Y NAVEGACIÓN (SIN BOTÓN SOBREPUESTO) */}
+        {/* ENCABEZADO Y NAVEGACIÓN */}
         <header className={`flex flex-col sm:flex-row justify-between items-center gap-4 p-4 rounded-3xl border shadow-lg ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between w-full sm:w-auto gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-                <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" onError={(e: any) => { e.target.onerror = null; e.target.src = 'https://raw.githubusercontent.com/wilfredo291190-svg/crm-prestamos/main/public/logo.png'; }} />
+                <img src="/logo.png" alt="Prestao" className="w-full h-full object-contain" />
               </div>
               <div>
                 <h1 className="text-lg font-black text-blue-500 tracking-tight leading-none">Prestao</h1>
@@ -1274,7 +1272,7 @@ export default function Home() {
           )}
         </main>
 
-        {/* PIE DE PÁGINA CON SELECTOR DE TEMA Y CERRAR SESIÓN (SIN SOLAPARSE) */}
+        {/* PIE DE PÁGINA CON SELECTOR DE TEMA Y CERRAR SESIÓN */}
         <footer className={`flex flex-col sm:flex-row justify-between items-center gap-4 p-4 rounded-3xl border text-xs ${isDark ? 'bg-gray-900 border-gray-800 text-gray-400' : 'bg-white border-gray-200 text-gray-600'}`}>
           <div className="flex items-center gap-2">
             <span className="font-semibold">Tema:</span>
