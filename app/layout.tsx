@@ -9,10 +9,23 @@ const montserrat = Montserrat({
 });
 
 export const metadata = {
-  title: "Presta'o - CRM de Préstamos",
-  description: 'Sistema de gestión de para micro préstamos personales',
-  verification: {
-    google: 'VGCvnxWNhrZuqkzmtywxIM0uI1KxVbSqB-Yvg7swx4U',
+  title: 'Prestao',
+  description: 'Gestor de Microcréditos',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon.png', type: 'image/png' },
+      { url: '/favicon.ico', type: 'image/x-icon' },
+    ],
+    shortcut: '/icon.png',
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Prestao',
   },
 };
 
@@ -24,9 +37,14 @@ export default function RootLayout({
   return (
     <html lang="es" className={montserrat.variable}>
       <head>
-        <meta name="google-site-verification" content="VGCvnxWNhrZuqkzmtywxIM0uI1KxVbSqB-Yvg7swx4U" />
+        <link rel="icon" href="/icon.png" sizes="any" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="apple-mobile-web-app-title" content="Prestao" />
+        <meta name="application-name" content="Prestao" />
+        <meta name="theme-color" content="#2563eb" />
       </head>
-      <body className={`${montserrat.className} bg-gray-950 text-gray-100 antialiased`}>
+      <body className="antialiased font-sans">
         {children}
       </body>
     </html>
